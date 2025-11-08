@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "dgSpecHash": "yK1qFxTidts=",
+  "success": true,
+  "projectFilePath": "/Users/bretthardman/_dev/claude_stuff/src/SpotifyGenreOrganizer/SpotifyGenreOrganizer.csproj",
+  "expectedPackageFiles": [
+    "/Users/bretthardman/.nuget/packages/embedio/3.5.2/embedio.3.5.2.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.configuration/9.0.10/microsoft.extensions.configuration.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.configuration.abstractions/9.0.10/microsoft.extensions.configuration.abstractions.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.configuration.binder/9.0.10/microsoft.extensions.configuration.binder.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.configuration.environmentvariables/9.0.10/microsoft.extensions.configuration.environmentvariables.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.configuration.fileextensions/9.0.10/microsoft.extensions.configuration.fileextensions.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.configuration.json/9.0.10/microsoft.extensions.configuration.json.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.fileproviders.abstractions/9.0.10/microsoft.extensions.fileproviders.abstractions.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.fileproviders.physical/9.0.10/microsoft.extensions.fileproviders.physical.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.filesystemglobbing/9.0.10/microsoft.extensions.filesystemglobbing.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/microsoft.extensions.primitives/9.0.10/microsoft.extensions.primitives.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/newtonsoft.json/13.0.4/newtonsoft.json.13.0.4.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/spotifyapi.web/7.2.1/spotifyapi.web.7.2.1.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/spotifyapi.web.auth/7.2.1/spotifyapi.web.auth.7.2.1.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/system.io.pipelines/9.0.10/system.io.pipelines.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/system.text.encodings.web/9.0.10/system.text.encodings.web.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/system.text.json/9.0.10/system.text.json.9.0.10.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/system.valuetuple/4.5.0/system.valuetuple.4.5.0.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/unosquare.swan.lite/3.1.0/unosquare.swan.lite.3.1.0.nupkg.sha512"
+  ],
+  "logs": []
+}

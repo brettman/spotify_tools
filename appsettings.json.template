@@ -1,0 +1,20 @@
+{
+  "Spotify": {
+    "ClientId": "YOUR_CLIENT_ID_HERE",
+    "ClientSecret": "YOUR_CLIENT_SECRET_HERE",
+    "RedirectUri": "http://localhost:5009/callback"
+  },
+  "GenreFilters": [
+    "rock",
+    "pop",
+    "jazz",
+    "classical",
+    "hip hop",
+    "electronic",
+    "indie",
+    "metal",
+    "country",
+    "r&b"
+  ],
+  "MultiGenreBehavior": "AddToAll"
+}
