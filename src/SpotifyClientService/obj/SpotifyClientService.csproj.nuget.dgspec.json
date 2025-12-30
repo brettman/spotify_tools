@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/Users/bretthardman/_dev/claude_stuff/src/SpotifyClientService/SpotifyClientService.csproj": {}
+    "/Users/bretthardman/_dev/spotify_tools/src/SpotifyClientService/SpotifyClientService.csproj": {}
   },
   "projects": {
-    "/Users/bretthardman/_dev/claude_stuff/src/SpotifyClientService/SpotifyClientService.csproj": {
+    "/Users/bretthardman/_dev/spotify_tools/src/SpotifyClientService/SpotifyClientService.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/bretthardman/_dev/claude_stuff/src/SpotifyClientService/SpotifyClientService.csproj",
+        "projectUniqueName": "/Users/bretthardman/_dev/spotify_tools/src/SpotifyClientService/SpotifyClientService.csproj",
         "projectName": "SpotifyClientService",
-        "projectPath": "/Users/bretthardman/_dev/claude_stuff/src/SpotifyClientService/SpotifyClientService.csproj",
+        "projectPath": "/Users/bretthardman/_dev/spotify_tools/src/SpotifyClientService/SpotifyClientService.csproj",
         "packagesPath": "/Users/bretthardman/.nuget/packages/",
-        "outputPath": "/Users/bretthardman/_dev/claude_stuff/src/SpotifyClientService/obj/",
+        "outputPath": "/Users/bretthardman/_dev/spotify_tools/src/SpotifyClientService/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/Users/bretthardman/.nuget/NuGet/NuGet.Config"
@@ -42,6 +42,20 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.Extensions.Configuration.Abstractions": {
+              "target": "Package",
+              "version": "[9.0.10, )"
+            },
+            "SpotifyAPI.Web": {
+              "target": "Package",
+              "version": "[7.2.1, )"
+            },
+            "SpotifyAPI.Web.Auth": {
+              "target": "Package",
+              "version": "[7.2.1, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",

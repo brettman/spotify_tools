@@ -8,6 +8,6 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = SpotifyGenreOrganizer
-build_property.ProjectDir = /Users/bretthardman/_dev/claude_stuff/src/SpotifyGenreOrganizer/
+build_property.ProjectDir = /Users/bretthardman/_dev/spotify_tools/src/SpotifyGenreOrganizer/
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
