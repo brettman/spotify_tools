@@ -3,40 +3,44 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using SpotifyAPI.Web;
-using SpotifyAPI.Web.Auth;
+using SpotifyClientService;
 
 namespace SpotifyGenreOrganizer
 {
     class Program
     {
-        private static IConfiguration? _configuration;
-        private static SpotifyClient? _spotify;
-        private static string? _userId;
-
         static async Task Main(string[] args)
         {
             Console.WriteLine("=== Spotify Genre Organizer ===\n");
 
-            // Load configuration
-            LoadConfiguration();
+            // Build host with dependency injection
+            var host = CreateHostBuilder(args).Build();
+
+            // Get services
+            var configuration = host.Services.GetRequiredService<IConfiguration>();
+            var spotifyService = host.Services.GetRequiredService<ISpotifyClientService>();
 
             // Authenticate with Spotify
-            await AuthenticateAsync();
+            await spotifyService.AuthenticateAsync();
 
-            // Get user profile
-            var profile = await _spotify!.UserProfile.Current();
-            _userId = profile.Id;
+            // Get user profile info
+            var profile = await spotifyService.Client.UserProfile.Current();
             Console.WriteLine($"Logged in as: {profile.DisplayName}\n");
 
             // Fetch all saved tracks
             Console.WriteLine("Fetching your saved tracks...");
-            var savedTracks = await FetchAllSavedTracksAsync();
+            var savedTracks = await FetchAllSavedTracksAsync(spotifyService.Client);
             Console.WriteLine($"Found {savedTracks.Count} saved tracks\n");
 
             // Analyze genres
             Console.WriteLine("Analyzing genres...");
-            var tracksByGenre = await CategorizeTracksByGenreAsync(savedTracks);
+            var tracksByGenre = await CategorizeTracksByGenreAsync(
+                spotifyService.Client,
+                savedTracks,
+                configuration);
 
             // Display genre statistics
             Console.WriteLine("\nGenre Distribution:");
@@ -46,7 +50,7 @@ namespace SpotifyGenreOrganizer
             }
 
             // Get target genres from configuration
-            var targetGenres = _configuration.GetSection("GenreFilters").Get<List<string>>()
+            var targetGenres = configuration.GetSection("GenreFilters").Get<List<string>>()
                 ?? new List<string>();
 
             if (!targetGenres.Any())
@@ -67,100 +71,29 @@ namespace SpotifyGenreOrganizer
             }
 
             // Create playlists for each genre
-            await CreateGenrePlaylistsAsync(tracksByGenre, targetGenres);
+            await CreateGenrePlaylistsAsync(
+                spotifyService.Client,
+                spotifyService.UserId!,
+                tracksByGenre,
+                targetGenres);
 
             Console.WriteLine("\n✓ Complete! Your genre playlists have been created.");
         }
 
-        static void LoadConfiguration()
-        {
-            _configuration = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                .AddEnvironmentVariables()
-                .Build();
-        }
-
-        static async Task AuthenticateAsync()
-        {
-            var clientId = _configuration!["Spotify:ClientId"];
-            var clientSecret = _configuration["Spotify:ClientSecret"];
-            var redirectUri = _configuration["Spotify:RedirectUri"] ?? "http://localhost:5009/callback";
-
-            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
-            {
-                throw new Exception("Spotify ClientId and ClientSecret must be configured in appsettings.json");
-            }
-
-            // Start local server for OAuth callback
-            var server = new EmbedIOAuthServer(new Uri(redirectUri), 5009);
-            await server.Start();
-
-            server.AuthorizationCodeReceived += async (sender, response) =>
-            {
-                await server.Stop();
-                var config = SpotifyClientConfig.CreateDefault();
-                var tokenResponse = await new OAuthClient(config).RequestToken(
-                    new AuthorizationCodeTokenRequest(
-                        clientId,
-                        clientSecret,
-                        response.Code,
-                        new Uri(redirectUri)
-                    )
-                );
-
-                _spotify = new SpotifyClient(tokenResponse.AccessToken);
-            };
-
-            var loginRequest = new LoginRequest(
-                new Uri(redirectUri),
-                clientId,
-                LoginRequest.ResponseType.Code
-            )
-            {
-                Scope = new[]
+        static IHostBuilder CreateHostBuilder(string[] args) =>
+            Host.CreateDefaultBuilder(args)
+                .ConfigureAppConfiguration((context, config) =>
                 {
-                    Scopes.UserLibraryRead,
-                    Scopes.PlaylistModifyPublic,
-                    Scopes.PlaylistModifyPrivate
-                }
-            };
-
-            var uri = loginRequest.ToUri();
-            Console.WriteLine("Please authorize the application:");
-            Console.WriteLine(uri);
-            Console.WriteLine("\nOpening browser...");
-
-            // Open browser
-            OpenBrowser(uri.ToString());
-
-            // Wait for authentication
-            while (_spotify == null)
-            {
-                await Task.Delay(100);
-            }
-
-            Console.WriteLine("✓ Authentication successful!\n");
-        }
-
-        static void OpenBrowser(string url)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    config.SetBasePath(Directory.GetCurrentDirectory())
+                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                        .AddEnvironmentVariables();
+                })
+                .ConfigureServices((context, services) =>
                 {
-                    FileName = url,
-                    UseShellExecute = true
+                    services.AddSingleton<ISpotifyClientService, SpotifyClientWrapper>();
                 });
-            }
-            catch
-            {
-                // Fallback for systems where UseShellExecute doesn't work
-                Console.WriteLine($"Please open this URL in your browser: {url}");
-            }
-        }
 
-        static async Task<List<SavedTrack>> FetchAllSavedTracksAsync()
+        static async Task<List<SavedTrack>> FetchAllSavedTracksAsync(SpotifyClient spotify)
         {
             var allTracks = new List<SavedTrack>();
             var offset = 0;
@@ -168,7 +101,7 @@ namespace SpotifyGenreOrganizer
 
             while (true)
             {
-                var tracks = await _spotify!.Library.GetTracks(new LibraryTracksRequest
+                var tracks = await spotify.Library.GetTracks(new LibraryTracksRequest
                 {
                     Limit = limit,
                     Offset = offset
@@ -191,11 +124,13 @@ namespace SpotifyGenreOrganizer
         }
 
         static async Task<Dictionary<string, List<FullTrack>>> CategorizeTracksByGenreAsync(
-            List<SavedTrack> savedTracks)
+            SpotifyClient spotify,
+            List<SavedTrack> savedTracks,
+            IConfiguration configuration)
         {
             var tracksByGenre = new Dictionary<string, List<FullTrack>>(StringComparer.OrdinalIgnoreCase);
             var processedCount = 0;
-            var multiGenreBehavior = _configuration!["MultiGenreBehavior"] ?? "AddToAll";
+            var multiGenreBehavior = configuration["MultiGenreBehavior"] ?? "AddToAll";
 
             foreach (var savedTrack in savedTracks)
             {
@@ -213,7 +148,7 @@ namespace SpotifyGenreOrganizer
                 {
                     try
                     {
-                        var fullArtist = await _spotify!.Artists.Get(artist.Id);
+                        var fullArtist = await spotify.Artists.Get(artist.Id);
                         if (fullArtist.Genres != null)
                         {
                             foreach (var genre in fullArtist.Genres)
@@ -261,6 +196,8 @@ namespace SpotifyGenreOrganizer
         }
 
         static async Task CreateGenrePlaylistsAsync(
+            SpotifyClient spotify,
+            string userId,
             Dictionary<string, List<FullTrack>> tracksByGenre,
             List<string> targetGenres)
         {
@@ -287,8 +224,8 @@ namespace SpotifyGenreOrganizer
 
                 // Create playlist
                 var playlistName = $"{targetGenre.ToUpper()} - Auto Generated";
-                var playlist = await _spotify!.Playlists.Create(
-                    _userId!,
+                var playlist = await spotify.Playlists.Create(
+                    userId,
                     new PlaylistCreateRequest(playlistName)
                     {
                         Description = $"Auto-generated playlist containing {targetGenre} tracks from your saved library.",
@@ -303,7 +240,7 @@ namespace SpotifyGenreOrganizer
                 for (int i = 0; i < trackUris.Count; i += 100)
                 {
                     var batch = trackUris.Skip(i).Take(100).ToList();
-                    await _spotify.Playlists.AddItems(
+                    await spotify.Playlists.AddItems(
                         playlist.Id!,
                         new PlaylistAddItemsRequest(batch)
                     );
