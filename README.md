@@ -68,7 +68,13 @@ docker-compose ps
 
 ### 3. Configure Application
 
-Edit `src/SpotifyGenreOrganizer/appsettings.json`:
+```bash
+# Copy the template and edit with your credentials
+cd src/SpotifyGenreOrganizer
+cp appsettings.json.template appsettings.json
+```
+
+Edit `appsettings.json` with your Spotify credentials and database password:
 
 ```json
 {
