@@ -27,7 +27,7 @@ public class SyncService : ISyncService
         _spotifyClient = spotifyClient ?? throw new ArgumentNullException(nameof(spotifyClient));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _rateLimiter = new RateLimiter(60, TimeSpan.FromMinutes(1)); // 60 requests per minute
+        _rateLimiter = new RateLimiter(30, TimeSpan.FromMinutes(1)); // 30 requests per minute (conservative)
     }
 
     public async Task<int> FullSyncAsync(CancellationToken cancellationToken = default)
