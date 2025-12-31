@@ -278,41 +278,42 @@ public class SyncService : ISyncService
     private async Task<int> SyncArtistsAsync(CancellationToken cancellationToken)
     {
         var artistsProcessed = 0;
-        var artistsSkipped = 0;
         var now = DateTime.UtcNow;
 
         // Get all unique artist IDs from track_artists table
         var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
-        var artistIds = trackArtists.Select(ta => ta.ArtistId).Distinct().ToList();
+        var allArtistIds = trackArtists.Select(ta => ta.ArtistId).Distinct().ToList();
 
-        var total = artistIds.Count;
+        // Get artist IDs that already have full details (not stubs)
+        var completedArtistIds = (await _unitOfWork.Artists.GetAllAsync())
+            .Where(a => a.Genres.Length > 0)
+            .Select(a => a.Id)
+            .ToHashSet();
 
-        foreach (var artistId in artistIds)
+        // Only sync artists that don't exist or are stubs
+        var artistIdsToSync = allArtistIds.Where(id => !completedArtistIds.Contains(id)).ToList();
+
+        var totalArtists = allArtistIds.Count;
+        var skippedCount = totalArtists - artistIdsToSync.Count;
+
+        _logger.LogInformation("Syncing {ToSync} artists ({Skipped} already completed)",
+            artistIdsToSync.Count, skippedCount);
+
+        // Create a dictionary of existing artists for update checks
+        var existingArtistsDict = (await _unitOfWork.Artists.GetAllAsync())
+            .Where(a => artistIdsToSync.Contains(a.Id))
+            .ToDictionary(a => a.Id);
+
+        foreach (var artistId in artistIdsToSync)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            // Check if artist already exists with full details (not a stub)
-            var existingArtist = await _unitOfWork.Artists.GetByIdAsync(artistId);
-            if (existingArtist != null && existingArtist.Genres.Length > 0)
-            {
-                // Artist already has full details, skip API call
-                artistsSkipped++;
-                artistsProcessed++;
-
-                if (artistsProcessed % 100 == 0)
-                {
-                    OnProgressChanged("Artists", artistsProcessed, total,
-                        $"Processed {artistsProcessed} of {total} artists ({artistsSkipped} skipped)");
-                }
-                continue;
-            }
-
-            // Artist doesn't exist or is a stub - fetch from Spotify
             await _rateLimiter.WaitAsync();
 
             try
             {
                 var spotifyArtist = await _spotifyClient.Client.Artists.Get(artistId);
+
+                existingArtistsDict.TryGetValue(artistId, out var existingArtist);
 
                 var artist = new Artist
                 {
@@ -344,8 +345,8 @@ public class SyncService : ISyncService
                 if (artistsProcessed % 10 == 0)
                 {
                     await _unitOfWork.SaveChangesAsync();
-                    OnProgressChanged("Artists", artistsProcessed, total,
-                        $"Processed {artistsProcessed} of {total} artists ({artistsSkipped} skipped)");
+                    OnProgressChanged("Artists", artistsProcessed, artistIdsToSync.Count,
+                        $"Synced {artistsProcessed} of {artistIdsToSync.Count} artists ({skippedCount} already completed)");
                 }
             }
             catch (Exception ex)
@@ -355,7 +356,7 @@ public class SyncService : ISyncService
         }
 
         await _unitOfWork.SaveChangesAsync();
-        OnProgressChanged("Artists", artistsProcessed, total, $"Completed {artistsProcessed} artists");
+        OnProgressChanged("Artists", artistsProcessed, artistIdsToSync.Count, $"Completed {artistsProcessed} artists");
 
         _logger.LogInformation("Synced {Count} artists", artistsProcessed);
         return artistsProcessed;
@@ -364,41 +365,42 @@ public class SyncService : ISyncService
     private async Task<int> SyncAlbumsAsync(CancellationToken cancellationToken)
     {
         var albumsProcessed = 0;
-        var albumsSkipped = 0;
         var now = DateTime.UtcNow;
 
         // Get all unique album IDs from track_albums table
         var trackAlbums = await _unitOfWork.TrackAlbums.GetAllAsync();
-        var albumIds = trackAlbums.Select(ta => ta.AlbumId).Distinct().ToList();
+        var allAlbumIds = trackAlbums.Select(ta => ta.AlbumId).Distinct().ToList();
 
-        var total = albumIds.Count;
+        // Get album IDs that already have full details (not stubs)
+        var completedAlbumIds = (await _unitOfWork.Albums.GetAllAsync())
+            .Where(a => !string.IsNullOrEmpty(a.Label))
+            .Select(a => a.Id)
+            .ToHashSet();
 
-        foreach (var albumId in albumIds)
+        // Only sync albums that don't exist or are stubs
+        var albumIdsToSync = allAlbumIds.Where(id => !completedAlbumIds.Contains(id)).ToList();
+
+        var totalAlbums = allAlbumIds.Count;
+        var skippedCount = totalAlbums - albumIdsToSync.Count;
+
+        _logger.LogInformation("Syncing {ToSync} albums ({Skipped} already completed)",
+            albumIdsToSync.Count, skippedCount);
+
+        // Create a dictionary of existing albums for update checks
+        var existingAlbumsDict = (await _unitOfWork.Albums.GetAllAsync())
+            .Where(a => albumIdsToSync.Contains(a.Id))
+            .ToDictionary(a => a.Id);
+
+        foreach (var albumId in albumIdsToSync)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            // Check if album already exists with full details (not a stub)
-            var existingAlbum = await _unitOfWork.Albums.GetByIdAsync(albumId);
-            if (existingAlbum != null && !string.IsNullOrEmpty(existingAlbum.Label))
-            {
-                // Album already has full details, skip API call
-                albumsSkipped++;
-                albumsProcessed++;
-
-                if (albumsProcessed % 100 == 0)
-                {
-                    OnProgressChanged("Albums", albumsProcessed, total,
-                        $"Processed {albumsProcessed} of {total} albums ({albumsSkipped} skipped)");
-                }
-                continue;
-            }
-
-            // Album doesn't exist or is a stub - fetch from Spotify
             await _rateLimiter.WaitAsync();
 
             try
             {
                 var spotifyAlbum = await _spotifyClient.Client.Albums.Get(albumId);
+
+                existingAlbumsDict.TryGetValue(albumId, out var existingAlbum);
 
                 var album = new Album
                 {
@@ -432,8 +434,8 @@ public class SyncService : ISyncService
                 if (albumsProcessed % 10 == 0)
                 {
                     await _unitOfWork.SaveChangesAsync();
-                    OnProgressChanged("Albums", albumsProcessed, total,
-                        $"Processed {albumsProcessed} of {total} albums ({albumsSkipped} skipped)");
+                    OnProgressChanged("Albums", albumsProcessed, albumIdsToSync.Count,
+                        $"Synced {albumsProcessed} of {albumIdsToSync.Count} albums ({skippedCount} already completed)");
                 }
             }
             catch (Exception ex)
@@ -443,7 +445,7 @@ public class SyncService : ISyncService
         }
 
         await _unitOfWork.SaveChangesAsync();
-        OnProgressChanged("Albums", albumsProcessed, total, $"Completed {albumsProcessed} albums");
+        OnProgressChanged("Albums", albumsProcessed, albumIdsToSync.Count, $"Completed {albumsProcessed} albums");
 
         _logger.LogInformation("Synced {Count} albums", albumsProcessed);
         return albumsProcessed;
