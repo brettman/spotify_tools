@@ -23,6 +23,8 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<TrackAlbum>? _trackAlbums;
     private IRepository<SpotifyToken>? _spotifyTokens;
     private IRepository<SyncHistory>? _syncHistory;
+    private IRepository<AudioAnalysis>? _audioAnalyses;
+    private IRepository<AudioAnalysisSection>? _audioAnalysisSections;
 
     public UnitOfWork(DbContext.SpotifyDbContext context)
     {
@@ -39,6 +41,8 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<TrackAlbum> TrackAlbums => _trackAlbums ??= new Repository<TrackAlbum>(_context);
     public IRepository<SpotifyToken> SpotifyTokens => _spotifyTokens ??= new Repository<SpotifyToken>(_context);
     public IRepository<SyncHistory> SyncHistory => _syncHistory ??= new Repository<SyncHistory>(_context);
+    public IRepository<AudioAnalysis> AudioAnalyses => _audioAnalyses ??= new Repository<AudioAnalysis>(_context);
+    public IRepository<AudioAnalysisSection> AudioAnalysisSections => _audioAnalysisSections ??= new Repository<AudioAnalysisSection>(_context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

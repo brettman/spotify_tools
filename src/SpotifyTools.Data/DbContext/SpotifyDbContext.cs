@@ -23,6 +23,8 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
     public DbSet<PlaylistTrack> PlaylistTracks => Set<PlaylistTrack>();
     public DbSet<SpotifyToken> SpotifyTokens => Set<SpotifyToken>();
     public DbSet<SyncHistory> SyncHistory => Set<SyncHistory>();
+    public DbSet<AudioAnalysis> AudioAnalyses => Set<AudioAnalysis>();
+    public DbSet<AudioAnalysisSection> AudioAnalysisSections => Set<AudioAnalysisSection>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -94,6 +96,42 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.HasIndex(e => e.Key);
             entity.HasIndex(e => e.Energy);
             entity.HasIndex(e => e.Danceability);
+        });
+
+        // AudioAnalysis configuration
+        modelBuilder.Entity<AudioAnalysis>(entity =>
+        {
+            entity.ToTable("audio_analyses");
+            entity.HasKey(e => e.TrackId);
+            entity.Property(e => e.TrackId).HasMaxLength(50);
+
+            // One-to-one relationship with Track
+            entity.HasOne(e => e.Track)
+                .WithOne(t => t.AudioAnalysis)
+                .HasForeignKey<AudioAnalysis>(e => e.TrackId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // One-to-many relationship with Sections
+            entity.HasMany(e => e.Sections)
+                .WithOne(s => s.AudioAnalysis)
+                .HasForeignKey(s => s.TrackId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.FetchedAt);
+        });
+
+        // AudioAnalysisSection configuration
+        modelBuilder.Entity<AudioAnalysisSection>(entity =>
+        {
+            entity.ToTable("audio_analysis_sections");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TrackId).HasMaxLength(50).IsRequired();
+
+            // Indexes for analytics queries
+            entity.HasIndex(e => e.TrackId);
+            entity.HasIndex(e => e.Key);
+            entity.HasIndex(e => e.Tempo);
+            entity.HasIndex(e => e.TimeSignature);
         });
 
         // Playlist configuration

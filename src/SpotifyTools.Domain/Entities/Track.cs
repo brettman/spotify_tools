@@ -57,6 +57,7 @@ public class Track
 
     // Navigation properties
     public AudioFeatures? AudioFeatures { get; set; }
+    public AudioAnalysis? AudioAnalysis { get; set; }
     public ICollection<TrackArtist> TrackArtists { get; set; } = new List<TrackArtist>();
     public ICollection<TrackAlbum> TrackAlbums { get; set; } = new List<TrackAlbum>();
     public ICollection<PlaylistTrack> PlaylistTracks { get; set; } = new List<PlaylistTrack>();

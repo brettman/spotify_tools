@@ -98,6 +98,61 @@ public static class ReportFormatter
             sb.AppendLine();
         }
 
+        // Audio Analysis (section-by-section breakdown)
+        if (report.AudioAnalysis != null && report.AudioAnalysis.Sections.Any())
+        {
+            var analysis = report.AudioAnalysis;
+
+            sb.AppendLine("🎼 AUDIO ANALYSIS (Section-by-Section):");
+            sb.AppendLine();
+            sb.AppendLine("   Overall Track Analysis:");
+            sb.AppendLine($"   • Overall Tempo: {analysis.TrackTempo:F1} BPM");
+            sb.AppendLine($"   • Overall Key: {analysis.KeyName} {analysis.ModeName}");
+            sb.AppendLine($"   • Time Signature: {analysis.TimeSignatureDisplay}");
+            sb.AppendLine($"   • Sections: {analysis.Sections.Count}");
+            sb.AppendLine();
+
+            sb.AppendLine("   Section Breakdown:");
+            sb.AppendLine("   ┌────────┬─────────┬──────┬─────────────────┬──────┐");
+            sb.AppendLine("   │ Time   │ Tempo   │ Key  │ Mode            │ Sig  │");
+            sb.AppendLine("   ├────────┼─────────┼──────┼─────────────────┼──────┤");
+
+            // Track key/tempo/time signature changes
+            int? lastKey = null;
+            int? lastMode = null;
+            float? lastTempo = null;
+            int? lastTimeSig = null;
+
+            foreach (var section in analysis.Sections)
+            {
+                // Highlight changes
+                var keyChanged = lastKey.HasValue && section.Key != lastKey.Value;
+                var modeChanged = lastMode.HasValue && section.Mode != lastMode.Value;
+                var tempoChanged = lastTempo.HasValue && Math.Abs(section.Tempo - lastTempo.Value) > 5;
+                var timeSigChanged = lastTimeSig.HasValue && section.TimeSignature != lastTimeSig.Value;
+
+                var highlight = keyChanged || modeChanged || tempoChanged || timeSigChanged;
+
+                var timeStr = section.StartTime.PadLeft(6);
+                var tempoStr = $"{section.Tempo:F1}".PadLeft(7);
+                var keyStr = section.KeyName.PadRight(4);
+                var modeStr = section.ModeName.PadRight(15);
+                var sigStr = section.TimeSignatureDisplay.PadLeft(4);
+
+                var prefix = highlight ? " ► " : "   ";
+                sb.AppendLine($"{prefix}│ {timeStr} │ {tempoStr} │ {keyStr} │ {modeStr} │ {sigStr} │");
+
+                lastKey = section.Key;
+                lastMode = section.Mode;
+                lastTempo = section.Tempo;
+                lastTimeSig = section.TimeSignature;
+            }
+
+            sb.AppendLine("   └────────┴─────────┴──────┴─────────────────┴──────┘");
+            sb.AppendLine("   (► indicates change from previous section)");
+            sb.AppendLine();
+        }
+
         // Playlists
         if (report.Playlists.Any())
         {

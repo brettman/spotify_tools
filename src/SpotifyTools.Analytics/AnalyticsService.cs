@@ -1,17 +1,24 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SpotifyTools.Data.Repositories.Interfaces;
+using SpotifyClientService;
+using SpotifyTools.Domain.Entities;
 
 namespace SpotifyTools.Analytics;
 
 public class AnalyticsService : IAnalyticsService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISpotifyClientService _spotifyClient;
     private readonly ILogger<AnalyticsService> _logger;
 
-    public AnalyticsService(IUnitOfWork unitOfWork, ILogger<AnalyticsService> logger)
+    public AnalyticsService(
+        IUnitOfWork unitOfWork,
+        ISpotifyClientService spotifyClient,
+        ILogger<AnalyticsService> logger)
     {
         _unitOfWork = unitOfWork;
+        _spotifyClient = spotifyClient;
         _logger = logger;
     }
 
@@ -97,6 +104,88 @@ public class AnalyticsService : IAnalyticsService
                     Loudness = audioFeatures.Loudness,
                     Speechiness = audioFeatures.Speechiness,
                     Valence = audioFeatures.Valence
+                };
+            }
+
+            // Fetch or retrieve audio analysis
+            var audioAnalysis = await _unitOfWork.AudioAnalyses.GetByIdAsync(trackId);
+            if (audioAnalysis == null && _spotifyClient.IsAuthenticated)
+            {
+                // Fetch from Spotify API and store
+                try
+                {
+                    var spotifyAnalysis = await _spotifyClient.Client.Tracks.GetAudioAnalysis(trackId);
+
+                    audioAnalysis = new AudioAnalysis
+                    {
+                        TrackId = trackId,
+                        TrackTempo = spotifyAnalysis.Track.Tempo,
+                        TrackKey = spotifyAnalysis.Track.Key,
+                        TrackMode = spotifyAnalysis.Track.Mode,
+                        TrackTimeSignature = spotifyAnalysis.Track.TimeSignature,
+                        TrackLoudness = spotifyAnalysis.Track.Loudness,
+                        Duration = spotifyAnalysis.Track.Duration,
+                        FetchedAt = DateTime.UtcNow,
+                        Sections = new List<AudioAnalysisSection>()
+                    };
+
+                    // Add sections
+                    foreach (var section in spotifyAnalysis.Sections)
+                    {
+                        audioAnalysis.Sections.Add(new AudioAnalysisSection
+                        {
+                            TrackId = trackId,
+                            Start = section.Start,
+                            Duration = section.Duration,
+                            Confidence = section.Confidence,
+                            Loudness = section.Loudness,
+                            Tempo = section.Tempo,
+                            TempoConfidence = section.TempoConfidence,
+                            Key = section.Key,
+                            KeyConfidence = section.KeyConfidence,
+                            Mode = section.Mode,
+                            ModeConfidence = section.ModeConfidence,
+                            TimeSignature = section.TimeSignature,
+                            TimeSignatureConfidence = section.TimeSignatureConfidence
+                        });
+                    }
+
+                    await _unitOfWork.AudioAnalyses.AddAsync(audioAnalysis);
+                    await _unitOfWork.SaveChangesAsync();
+
+                    _logger.LogInformation("Fetched and stored audio analysis for track {TrackId}", trackId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to fetch audio analysis for track {TrackId}", trackId);
+                }
+            }
+
+            if (audioAnalysis != null)
+            {
+                // Load sections if not already loaded
+                var sections = (await _unitOfWork.AudioAnalysisSections.GetAllAsync())
+                    .Where(s => s.TrackId == trackId)
+                    .OrderBy(s => s.Start)
+                    .ToList();
+
+                report.AudioAnalysis = new TrackDetailReport.AudioAnalysisInfo
+                {
+                    TrackTempo = audioAnalysis.TrackTempo,
+                    TrackKey = audioAnalysis.TrackKey,
+                    TrackMode = audioAnalysis.TrackMode,
+                    TrackTimeSignature = audioAnalysis.TrackTimeSignature,
+                    Duration = audioAnalysis.Duration,
+                    Sections = sections.Select(s => new TrackDetailReport.AudioAnalysisSection
+                    {
+                        Start = s.Start,
+                        Duration = s.Duration,
+                        Tempo = s.Tempo,
+                        Key = s.Key,
+                        Mode = s.Mode,
+                        TimeSignature = s.TimeSignature,
+                        Loudness = s.Loudness
+                    }).ToList()
                 };
             }
 

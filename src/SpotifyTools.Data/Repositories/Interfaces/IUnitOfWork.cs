@@ -18,6 +18,8 @@ public interface IUnitOfWork : IDisposable
     IRepository<TrackAlbum> TrackAlbums { get; }
     IRepository<SpotifyToken> SpotifyTokens { get; }
     IRepository<SyncHistory> SyncHistory { get; }
+    IRepository<AudioAnalysis> AudioAnalyses { get; }
+    IRepository<AudioAnalysisSection> AudioAnalysisSections { get; }
 
     /// <summary>
     /// Save all changes to the database
