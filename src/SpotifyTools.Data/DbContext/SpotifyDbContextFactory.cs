@@ -15,7 +15,7 @@ public class SpotifyDbContextFactory : IDesignTimeDbContextFactory<SpotifyDbCont
 
         // Default connection string for migrations
         // This will be overridden by appsettings.json in the actual application
-        var connectionString = "Host=localhost;Port=5432;Database=spotify_tools;Username=spotify_user;Password=spotify_dev_password";
+        var connectionString = "Host=localhost;Port=5433;Database=spotify_tools;Username=spotify_user;Password=my_s3cur3_p455w0rd!";
 
         optionsBuilder.UseNpgsql(connectionString);
 

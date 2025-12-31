@@ -13,6 +13,9 @@ public interface IUnitOfWork : IDisposable
     IRepository<Album> Albums { get; }
     IRepository<AudioFeatures> AudioFeatures { get; }
     IRepository<Playlist> Playlists { get; }
+    IRepository<PlaylistTrack> PlaylistTracks { get; }
+    IRepository<TrackArtist> TrackArtists { get; }
+    IRepository<TrackAlbum> TrackAlbums { get; }
     IRepository<SpotifyToken> SpotifyTokens { get; }
     IRepository<SyncHistory> SyncHistory { get; }
 

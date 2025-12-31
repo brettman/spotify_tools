@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SpotifyClientService\SpotifyClientService.csproj" />
+    <ProjectReference Include="..\SpotifyTools.Data\SpotifyTools.Data.csproj" />
+    <ProjectReference Include="..\SpotifyTools.Sync\SpotifyTools.Sync.csproj" />
   </ItemGroup>
 
 </Project>

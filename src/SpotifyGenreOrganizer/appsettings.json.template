@@ -1,0 +1,23 @@
+{
+  "ConnectionStrings": {
+    "SpotifyDatabase": "Host=localhost;Port=5433;Database=spotify_tools;Username=spotify_user;Password=YOUR_PASSWORD_HERE"
+  },
+  "Spotify": {
+    "ClientId": "YOUR_SPOTIFY_CLIENT_ID",
+    "ClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET",
+    "RedirectUri": "http://127.0.0.1:5009/callback"
+  },
+  "GenreFilters": [
+    "rock",
+    "pop",
+    "jazz",
+    "classical",
+    "hip hop",
+    "electronic",
+    "indie",
+    "metal",
+    "country",
+    "r&b"
+  ],
+  "MultiGenreBehavior": "AddToAll"
+}

@@ -32,7 +32,7 @@ spotify-tools-db      "docker-entrypoint.s…"   postgres   Up (healthy)
 
 **Connection String:**
 ```
-Host=localhost;Port=5432;Database=spotify_tools;Username=spotify_user;Password=<your_password>
+Host=localhost;Port=5433;Database=spotify_tools;Username=spotify_user;Password=<your_password>
 ```
 
 **Using psql:**
@@ -80,7 +80,7 @@ cat backup_file.sql | docker exec -i spotify-tools-db psql -U spotify_user -d sp
 ## Database Configuration
 
 - **Image:** PostgreSQL 16 Alpine (lightweight)
-- **Port:** 5432 (mapped to host)
+- **Port:** 5433 (mapped to host, internal container port is 5432)
 - **Database:** spotify_tools
 - **User:** spotify_user
 - **Password:** Set via .env file (DB_PASSWORD)
@@ -92,10 +92,8 @@ The container includes a healthcheck that verifies PostgreSQL is ready to accept
 
 ## Troubleshooting
 
-### Port 5432 already in use
-If you have PostgreSQL installed locally, either:
-1. Stop the local PostgreSQL service
-2. Change the port mapping in docker-compose.yml (e.g., "5433:5432")
+### Port 5433 already in use
+If you need to use a different port, change the port mapping in docker-compose.yml (e.g., "5434:5432") and update your connection strings accordingly.
 
 ### Container won't start
 Check logs:

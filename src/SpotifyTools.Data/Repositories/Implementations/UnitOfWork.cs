@@ -18,6 +18,9 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<Album>? _albums;
     private IRepository<AudioFeatures>? _audioFeatures;
     private IRepository<Playlist>? _playlists;
+    private IRepository<PlaylistTrack>? _playlistTracks;
+    private IRepository<TrackArtist>? _trackArtists;
+    private IRepository<TrackAlbum>? _trackAlbums;
     private IRepository<SpotifyToken>? _spotifyTokens;
     private IRepository<SyncHistory>? _syncHistory;
 
@@ -31,6 +34,9 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<Album> Albums => _albums ??= new Repository<Album>(_context);
     public IRepository<AudioFeatures> AudioFeatures => _audioFeatures ??= new Repository<AudioFeatures>(_context);
     public IRepository<Playlist> Playlists => _playlists ??= new Repository<Playlist>(_context);
+    public IRepository<PlaylistTrack> PlaylistTracks => _playlistTracks ??= new Repository<PlaylistTrack>(_context);
+    public IRepository<TrackArtist> TrackArtists => _trackArtists ??= new Repository<TrackArtist>(_context);
+    public IRepository<TrackAlbum> TrackAlbums => _trackAlbums ??= new Repository<TrackAlbum>(_context);
     public IRepository<SpotifyToken> SpotifyTokens => _spotifyTokens ??= new Repository<SpotifyToken>(_context);
     public IRepository<SyncHistory> SyncHistory => _syncHistory ??= new Repository<SyncHistory>(_context);
 

@@ -1,203 +1,236 @@
-# Spotify Genre Organizer
+# Spotify Tools
 
-A C# console application that organizes your Spotify saved tracks into genre-specific playlists automatically.
+A C# application that syncs your Spotify library to PostgreSQL for offline access and custom analytics, with a focus on audio features (tempo, key, energy, etc.) for DJ mixing and music analysis.
 
 ## Features
 
-- OAuth authentication with Spotify
-- Fetches all your saved/favorite tracks
-- Analyzes genre information from track artists
-- Creates playlists based on configurable genre filters
-- Supports multi-genre tracks (can add to multiple playlists or primary genre only)
-- Handles thousands of tracks efficiently
+### Current
+- ✅ **Full Library Sync** - Import all saved tracks, artists, albums, playlists
+- ✅ **Audio Features** - Tempo, key, mode, danceability, energy, and more
+- ✅ **PostgreSQL Storage** - Local database for offline queries and analytics
+- ✅ **Interactive CLI** - User-friendly menu interface
+- ✅ **Sync History** - Track all import operations with statistics
+- ✅ **Rate Limiting** - Respects Spotify API limits (60 requests/min)
+
+### Coming Soon
+- ⏳ **Analytics & Reports** - Tempo distribution, key analysis, genre statistics
+- 📅 **Incremental Sync** - Update only changed data
+- 📅 **Web Interface** - Browse and analyze your library in a browser
+
+## Architecture
+
+```
+SpotifyTools/
+├── SpotifyTools.Domain      # Entity models (Track, Artist, Album, etc.)
+├── SpotifyTools.Data         # EF Core, repositories, Unit of Work
+├── SpotifyTools.Sync         # Sync orchestration with rate limiting
+├── SpotifyTools.Analytics    # Analytics and reporting (coming soon)
+├── SpotifyClientService      # Spotify API wrapper with OAuth
+└── SpotifyGenreOrganizer     # CLI interface
+```
 
 ## Prerequisites
 
-1. **.NET SDK** (version 6.0 or higher)
+1. **.NET 8.0 SDK**
    - Download from https://dotnet.microsoft.com/download
 
-2. **Spotify Developer Account & App**
+2. **Docker Desktop**
+   - For running PostgreSQL database
+   - Download from https://www.docker.com/products/docker-desktop
+
+3. **Spotify Developer App**
    - Go to https://developer.spotify.com/dashboard
-   - Log in with your Spotify account
-   - Click "Create an App"
-   - Give it a name (e.g., "Genre Organizer")
+   - Create a new app
    - Note your **Client ID** and **Client Secret**
-   - Click "Edit Settings" and add `http://localhost:5000/callback` to the Redirect URIs
-   - Save the settings
+   - Add redirect URI: `http://127.0.0.1:5009/callback`
 
-## Setup Instructions
+## Quick Start
 
-### 1. Run the Setup Script
-
-```bash
-./setup-spotify-app.sh
-```
-
-This will:
-- Create the solution and project structure
-- Install all required NuGet packages
-
-### 2. Configure the Application
-
-Copy the template configuration file:
+### 1. Clone and Setup
 
 ```bash
-cp appsettings.json.template SpotifyGenreOrganizer/src/SpotifyGenreOrganizer/appsettings.json
+cd /path/to/spotify_tools
 ```
 
-Edit `appsettings.json` and add your Spotify credentials:
+### 2. Start PostgreSQL Database
+
+```bash
+# Copy environment template
+cp .env.template .env
+
+# Edit .env and set a secure password
+# Then start PostgreSQL
+docker-compose up -d
+
+# Verify it's running
+docker-compose ps
+```
+
+### 3. Configure Application
+
+Edit `src/SpotifyGenreOrganizer/appsettings.json`:
 
 ```json
 {
-  "Spotify": {
-    "ClientId": "your_actual_client_id",
-    "ClientSecret": "your_actual_client_secret",
-    "RedirectUri": "http://localhost:5000/callback"
+  "ConnectionStrings": {
+    "SpotifyDatabase": "Host=localhost;Port=5433;Database=spotify_tools;Username=spotify_user;Password=YOUR_PASSWORD"
   },
-  "GenreFilters": [
-    "rock",
-    "pop",
-    "jazz"
-  ],
-  "MultiGenreBehavior": "AddToAll"
+  "Spotify": {
+    "ClientId": "YOUR_CLIENT_ID",
+    "ClientSecret": "YOUR_CLIENT_SECRET",
+    "RedirectUri": "http://127.0.0.1:5009/callback"
+  }
 }
 ```
 
-**Configuration Options:**
-
-- `GenreFilters`: Array of genre names you want to create playlists for
-- `MultiGenreBehavior`:
-  - `"AddToAll"` - Add tracks to all matching genre playlists
-  - `"PrimaryOnly"` - Add tracks only to their primary genre
-
-### 3. Copy Program.cs
+### 4. Apply Database Migrations
 
 ```bash
-cp Program.cs.template SpotifyGenreOrganizer/src/SpotifyGenreOrganizer/Program.cs
+cd src/SpotifyTools.Data
+dotnet ef database update
 ```
 
-### 4. (Optional) Setup Git Ignore
-
-If you're using git:
+### 5. Run the Application
 
 ```bash
-cp .gitignore.template SpotifyGenreOrganizer/.gitignore
+cd ../SpotifyGenreOrganizer
+dotnet run
 ```
 
-This ensures your Spotify credentials don't get committed to version control.
+## Using the CLI
 
-## Running the Application
+### Main Menu
 
-Navigate to the project directory and run:
-
-```bash
-cd SpotifyGenreOrganizer
-dotnet run --project src/SpotifyGenreOrganizer
+```
+╔════════════════════════════════════════╗
+║     Spotify Tools - CLI Interface     ║
+╠════════════════════════════════════════╣
+║  1. Full Sync (Import all data)       ║
+║  2. View Last Sync Status              ║
+║  3. View Sync History                  ║
+║  4. Analytics (Coming soon)            ║
+║  5. Exit                               ║
+╚════════════════════════════════════════╝
 ```
 
-The application will:
-1. Open your browser for Spotify authorization
-2. Fetch all your saved tracks
-3. Analyze genres for each track
-4. Show you genre statistics
-5. Create playlists for your configured genres
+### Full Sync
 
-## How It Works
+Option 1 performs a complete import:
+1. Authenticates with Spotify (opens browser)
+2. Fetches all saved tracks
+3. Fetches artist details with genres
+4. Fetches album details
+5. Fetches audio features (tempo, key, etc.)
+6. Fetches user playlists
 
-### Genre Detection
+**Time Estimate:**
+- ~1 hour per 3,000 tracks (due to API rate limiting)
+- Progress updates shown in real-time
 
-The app fetches genre information from each track's artists. Since Spotify doesn't assign genres directly to tracks, the app:
-- Looks at all artists on each track
-- Retrieves their genre tags
-- Assigns tracks to genre categories based on these tags
+### View Sync Status
 
-### Genre Matching
+Options 2 & 3 show:
+- Last sync completion time
+- Statistics (tracks, artists, albums processed)
+- Success/failure status
+- Historical sync data
 
-The genre matching is flexible:
-- Case-insensitive matching
-- Partial matching (e.g., "rock" will match "alternative rock", "indie rock", etc.)
-- Configurable target genres in `appsettings.json`
+## Database Schema
 
-### Rate Limiting
+### Core Tables
+- **tracks** - Track metadata (name, duration, popularity, ISRC)
+- **artists** - Artist data (name, genres, popularity, followers)
+- **albums** - Album information (name, release date, label)
+- **audio_features** - Audio analysis (tempo, key, danceability, energy, etc.)
+- **playlists** - User playlists
 
-The app includes small delays between API calls to respect Spotify's rate limits.
+### Relationship Tables
+- **track_artists** - Many-to-many with artist position tracking
+- **track_albums** - Track-album relationships with disc/track numbers
+- **playlist_tracks** - Playlist contents with positions
 
-## Customization
+### Metadata Tables
+- **sync_history** - Tracks all sync operations
+- **spotify_tokens** - OAuth tokens (future use)
 
-### Adding More Genres
+## Configuration
 
-Edit the `GenreFilters` array in `appsettings.json`:
+### Database (PostgreSQL)
+- **Port:** 5433 (mapped from container)
+- **Database:** spotify_tools
+- **User:** spotify_user
+- **Password:** Set in `.env` file
 
-```json
-"GenreFilters": [
-  "rock",
-  "pop",
-  "hip hop",
-  "electronic",
-  "jazz",
-  "classical",
-  "indie",
-  "metal",
-  "country",
-  "r&b",
-  "soul",
-  "blues",
-  "reggae",
-  "folk"
-]
-```
-
-### Playlist Names
-
-Playlists are named: `[GENRE] - Auto Generated`
-
-You can modify the naming in `Program.cs` line 265:
-
-```csharp
-var playlistName = $"{targetGenre.ToUpper()} - Auto Generated";
-```
-
-### Public vs Private Playlists
-
-By default, playlists are created as private. To make them public, change line 268:
-
-```csharp
-Public = true
-```
+### Spotify API
+- **Rate Limit:** 60 requests/minute (configurable in code)
+- **Scopes:** UserLibraryRead, PlaylistModifyPublic, PlaylistModifyPrivate
+- **OAuth:** Authorization code flow with browser
 
 ## Troubleshooting
 
-### "Failed to authenticate"
-- Verify your Client ID and Client Secret are correct
-- Make sure the Redirect URI in your Spotify app settings matches exactly: `http://localhost:5000/callback`
+### OAuth "INVALID_CLIENT" Error
+- Ensure redirect URI in Spotify Dashboard exactly matches: `http://127.0.0.1:5009/callback`
+- Use `127.0.0.1` not `localhost`
+- Verify Client ID and Secret are correct
 
-### "Port 5000 already in use"
-- Change the port in `appsettings.json` and in your Spotify app's Redirect URIs
-- Make sure both match exactly
+### Port Already in Use
+- PostgreSQL runs on port 5433 to avoid conflicts with local installations
+- Change port in `docker-compose.yml` and connection string if needed
 
-### "No tracks found for genre"
-- The genre might not exist in your library
-- Try using more general genre names (e.g., "rock" instead of "progressive rock")
-- Check the genre statistics output to see what genres are available
+### Foreign Key Errors
+- Ensure database migrations are applied: `dotnet ef database update`
+- Check PostgreSQL is running: `docker-compose ps`
 
-### Rate Limiting
-- The app includes delays to avoid rate limiting
-- If you hit rate limits, the delays might need to be increased in the code
+### DateTime UTC Errors
+- This is handled in the code
+- All DateTimes are converted to UTC before saving
 
-## Dependencies
+## Project Documentation
 
-- **SpotifyAPI.Web** - Spotify Web API wrapper
-- **SpotifyAPI.Web.Auth** - OAuth authentication for Spotify
-- **Microsoft.Extensions.Configuration** - Configuration management
-- **Newtonsoft.Json** - JSON serialization
+- **context.md** - Detailed project status, architecture decisions, and progress tracking
+- **CLAUDE.md** - Instructions for Claude Code when working on this project
+- **DOCKER.md** - Docker setup and PostgreSQL management guide
+
+## Technology Stack
+
+- **Language:** C# / .NET 8
+- **Database:** PostgreSQL 16 (Docker)
+- **ORM:** Entity Framework Core 8.0
+- **Spotify API:** SpotifyAPI.Web 7.2.1
+- **Architecture:** Clean Architecture with Repository pattern
+
+## Roadmap
+
+### Phase 1-5: Complete ✅
+- Project structure and domain models
+- Data layer with EF Core
+- Sync service with rate limiting
+- CLI interface
+- Full library import
+
+### Phase 6: In Progress ⏳
+- Analytics service
+- Tempo analysis and distribution
+- Key/mode distribution for DJ mixing
+- Genre statistics
+
+### Future Phases
+- Incremental sync (only fetch changes)
+- Web interface (ASP.NET Core)
+- Advanced analytics (correlations, recommendations)
+- External data integration (MusicBrainz)
+- Export and backup functionality
+
+## Contributing
+
+This is a personal project, but suggestions and feedback are welcome!
 
 ## License
 
-MIT License - Feel free to modify and use as needed!
+MIT License - Feel free to use and modify for your own purposes.
 
-## Tips
+## Acknowledgments
 
-- Start with a smaller set of genres to test
-- Review the genre statistics before creating playlists
-- The app creates new playlists each time - it doesn't update existing ones
-- Consider running periodically to catch new saved tracks
+- Built with [SpotifyAPI-NET](https://github.com/JohnnyCrazy/SpotifyAPI-NET)
+- Powered by [Entity Framework Core](https://github.com/dotnet/efcore)
+- Database: [PostgreSQL](https://www.postgresql.org/)
