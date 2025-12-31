@@ -58,10 +58,13 @@ public class CliMenuService
                         await ShowTrackDetailAsync();
                         break;
                     case "5":
+                        await TestArtistApiAsync();
+                        break;
+                    case "6":
                         Console.WriteLine("\nGoodbye!");
                         return;
                     default:
-                        Console.WriteLine("\n❌ Invalid choice. Please select 1-5.");
+                        Console.WriteLine("\n❌ Invalid choice. Please select 1-6.");
                         break;
                 }
             }
@@ -71,7 +74,7 @@ public class CliMenuService
                 Console.WriteLine($"\n❌ Error: {ex.Message}");
             }
 
-            if (choice != "5")
+            if (choice != "6")
             {
                 Console.WriteLine("\nPress any key to continue...");
                 Console.ReadKey();
@@ -100,9 +103,10 @@ public class CliMenuService
         Console.WriteLine("│  2. View Last Sync Status              │");
         Console.WriteLine("│  3. View Sync History                  │");
         Console.WriteLine("│  4. Track Detail Report                │");
-        Console.WriteLine("│  5. Exit                               │");
+        Console.WriteLine("│  5. Test Artist API (Debug)            │");
+        Console.WriteLine("│  6. Exit                               │");
         Console.WriteLine("└────────────────────────────────────────┘");
-        Console.Write("\nSelect an option (1-5): ");
+        Console.Write("\nSelect an option (1-6): ");
     }
 
     private async Task FullSyncAsync()
@@ -310,6 +314,107 @@ public class CliMenuService
             _logger.LogError(ex, "Error displaying track detail report");
             Console.WriteLine($"\n❌ Error: {ex.Message}");
         }
+    }
+
+    private async Task TestArtistApiAsync()
+    {
+        Console.WriteLine("\n╔════════════════════════════════════════╗");
+        Console.WriteLine("║      Test Artist API (Debug)           ║");
+        Console.WriteLine("╚════════════════════════════════════════╝");
+        Console.WriteLine();
+
+        // Authenticate first
+        Console.WriteLine("🔐 Authenticating with Spotify...");
+        if (!_spotifyClient.IsAuthenticated)
+        {
+            await _spotifyClient.AuthenticateAsync();
+        }
+        else
+        {
+            Console.WriteLine("✓ Already authenticated");
+        }
+        Console.WriteLine();
+
+        // Prompt for artist ID or use default
+        Console.WriteLine("Enter an artist Spotify ID to test");
+        Console.WriteLine("(or press Enter to use default: 0OdUWJ0sBjDrqHygGUXeCF - Band of Horses)");
+        Console.Write("> ");
+        var artistId = Console.ReadLine()?.Trim();
+
+        if (string.IsNullOrWhiteSpace(artistId))
+        {
+            artistId = "0OdUWJ0sBjDrqHygGUXeCF"; // Band of Horses
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"🧪 Testing Artist API with ID: {artistId}");
+        Console.WriteLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        Console.WriteLine();
+
+        try
+        {
+            var startTime = DateTime.Now;
+            var artist = await _spotifyClient.Client.Artists.Get(artistId);
+            var duration = DateTime.Now - startTime;
+
+            Console.WriteLine("✓ SUCCESS!");
+            Console.WriteLine();
+            Console.WriteLine($"Artist: {artist.Name}");
+            Console.WriteLine($"Popularity: {artist.Popularity}");
+            Console.WriteLine($"Followers: {artist.Followers.Total:N0}");
+            Console.WriteLine($"Genres: {string.Join(", ", artist.Genres)}");
+            Console.WriteLine($"Response Time: {duration.TotalMilliseconds:F0}ms");
+            Console.WriteLine();
+            Console.WriteLine("✓ API is working - no rate limit issues detected");
+        }
+        catch (SpotifyAPI.Web.APITooManyRequestsException ex)
+        {
+            Console.WriteLine("❌ RATE LIMIT ERROR (429)");
+            Console.WriteLine();
+
+            // Try to get Retry-After header
+            var retryAfter = "not provided";
+            if (ex.Response?.Headers?.ContainsKey("Retry-After") == true)
+            {
+                retryAfter = ex.Response.Headers["Retry-After"];
+            }
+
+            Console.WriteLine($"Retry-After Header: {retryAfter}");
+            Console.WriteLine();
+
+            if (int.TryParse(retryAfter, out var retrySeconds))
+            {
+                var hours = retrySeconds / 3600.0;
+                if (hours >= 1)
+                {
+                    Console.WriteLine($"⚠️  DAILY QUOTA LIMIT DETECTED!");
+                    Console.WriteLine($"   Spotify wants you to wait {hours:F1} hours ({retrySeconds:N0} seconds)");
+                    Console.WriteLine();
+                    Console.WriteLine("This indicates you've hit a daily API quota limit, not just rate limiting.");
+                    Console.WriteLine("You'll need to wait until the quota resets (typically 24 hours).");
+                }
+                else
+                {
+                    Console.WriteLine($"Rate limit retry after: {retrySeconds} seconds");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Could not parse Retry-After value: {retryAfter}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("Full error:");
+            Console.WriteLine(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ ERROR: {ex.GetType().Name}");
+            Console.WriteLine($"Message: {ex.Message}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 
     private string GetStatusEmoji(SpotifyTools.Domain.Enums.SyncStatus status)
