@@ -114,6 +114,43 @@ A tool to fetch Spotify library data (tracks, albums, artists, playlists), store
 - ✅ DateTime UTC issues fixed
 - ✅ Full sync successfully running (3,462 tracks, 2,092 artists)
 
+### Phase 6: Analytics Service ⏳
+**Started:** 2025-12-31
+
+**Analytics Service (SpotifyTools.Analytics):**
+- ✅ IAnalyticsService interface with search and report methods
+- ✅ AnalyticsService implementation (~200 lines)
+- ✅ TrackDetailReport data model with nested classes
+- ✅ ReportFormatter with beautiful CLI output
+- ✅ CLI integration (menu option 4)
+
+**Features Completed:**
+- Track search by name (top 10 results)
+- Comprehensive track detail report showing:
+  - Basic track info (name, duration, popularity, ISRC, added date)
+  - Artist details (name, genres, popularity, followers)
+  - Album information (type, release date, label, total tracks)
+  - Audio Features with visual bars:
+    - Musical characteristics (tempo, key, mode, time signature, loudness)
+    - Mood & feel (danceability, energy, valence)
+    - Audio qualities (acousticness, instrumentalness, liveness, speechiness)
+  - Playlists containing the track
+- Key name translation (0 = C, 1 = C♯/D♭, etc.)
+- Mode display (Major/Minor)
+- Time signature display (4/4, 3/4, etc.)
+
+**Next Step - Audio Analysis Enhancement:**
+- 📋 **Enhance track detail report with Spotify Audio Analysis data**
+  - Integrate `audio-analysis` endpoint (separate from `audio-features`)
+  - Show section-by-section breakdown with timestamps
+  - Display key changes throughout the song
+  - Show tempo variations across sections
+  - Detect structural changes (verse/chorus/bridge transitions)
+  - Particularly valuable for progressive rock and jazz with time signature changes
+  - Example use case: "Thick as a Brick" by Jethro Tull with multiple key/time changes
+  - Add optional detailed view or separate menu option
+  - Consider storing analysis data in database for offline access
+
 ---
 
 ## Planned Architecture (In Progress)
@@ -203,13 +240,17 @@ SpotifyTools.sln
    - ✅ Create CLI menu
    - ⏳ Implement analytics service
 
-### Current Focus (Phase 6)
-- **Analytics Service Implementation**
-  - Tempo analysis and distribution
+### Current Focus (Phase 6 - In Progress)
+- ✅ Basic track detail report (COMPLETE)
+- 📋 **Next: Audio Analysis Enhancement**
+  - Add Spotify Audio Analysis integration
+  - Section-by-section key/tempo/time signature tracking
+  - Structural analysis display
+- ⏳ **Future Phase 6 Features:**
+  - Tempo distribution analysis
   - Key/mode distribution for DJ mixing
   - Genre statistics from artist data
-  - Custom report interface
-  - Integration with CLI menu
+  - Advanced analytics reports
 
 ### Short Term
 - ✅ Full import functionality (DONE)

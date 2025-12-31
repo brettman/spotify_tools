@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using SpotifyClientService;
 using SpotifyTools.Sync;
 using SpotifyTools.Data.Repositories.Interfaces;
+using SpotifyTools.Analytics;
 
 namespace SpotifyGenreOrganizer;
 
@@ -13,17 +14,20 @@ public class CliMenuService
     private readonly ISpotifyClientService _spotifyClient;
     private readonly ISyncService _syncService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAnalyticsService _analyticsService;
     private readonly ILogger<CliMenuService> _logger;
 
     public CliMenuService(
         ISpotifyClientService spotifyClient,
         ISyncService syncService,
         IUnitOfWork unitOfWork,
+        IAnalyticsService analyticsService,
         ILogger<CliMenuService> logger)
     {
         _spotifyClient = spotifyClient ?? throw new ArgumentNullException(nameof(spotifyClient));
         _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _analyticsService = analyticsService ?? throw new ArgumentNullException(nameof(analyticsService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -51,7 +55,7 @@ public class CliMenuService
                         await ViewSyncHistoryAsync();
                         break;
                     case "4":
-                        ShowAnalyticsPlaceholder();
+                        await ShowTrackDetailAsync();
                         break;
                     case "5":
                         Console.WriteLine("\nGoodbye!");
@@ -95,7 +99,7 @@ public class CliMenuService
         Console.WriteLine("│  1. Full Sync (Import all data)       │");
         Console.WriteLine("│  2. View Last Sync Status              │");
         Console.WriteLine("│  3. View Sync History                  │");
-        Console.WriteLine("│  4. Analytics (Coming soon)            │");
+        Console.WriteLine("│  4. Track Detail Report                │");
         Console.WriteLine("│  5. Exit                               │");
         Console.WriteLine("└────────────────────────────────────────┘");
         Console.Write("\nSelect an option (1-5): ");
@@ -234,18 +238,78 @@ public class CliMenuService
         Console.WriteLine("└──────┴─────────────────────┴──────────┴────────┴────────────┘");
     }
 
-    private void ShowAnalyticsPlaceholder()
+    private async Task ShowTrackDetailAsync()
     {
         Console.WriteLine("\n╔════════════════════════════════════════╗");
-        Console.WriteLine("║           Analytics                    ║");
-        Console.WriteLine("╠════════════════════════════════════════╣");
-        Console.WriteLine("║  Coming soon!                          ║");
-        Console.WriteLine("║                                        ║");
-        Console.WriteLine("║  • Tempo analysis                      ║");
-        Console.WriteLine("║  • Key distribution                    ║");
-        Console.WriteLine("║  • Genre statistics                    ║");
-        Console.WriteLine("║  • Custom reports                      ║");
+        Console.WriteLine("║        Track Detail Report             ║");
         Console.WriteLine("╚════════════════════════════════════════╝");
+        Console.WriteLine();
+
+        // Prompt for track search
+        Console.Write("Enter track name to search: ");
+        var searchTerm = Console.ReadLine()?.Trim();
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            Console.WriteLine("\n❌ Search term cannot be empty.");
+            return;
+        }
+
+        try
+        {
+            // Search for tracks
+            var results = await _analyticsService.SearchTracksAsync(searchTerm, 10);
+
+            if (!results.Any())
+            {
+                Console.WriteLine($"\n❌ No tracks found matching '{searchTerm}'");
+                return;
+            }
+
+            // Display search results
+            Console.WriteLine($"\nFound {results.Count} track(s):");
+            Console.WriteLine();
+            for (int i = 0; i < results.Count; i++)
+            {
+                Console.WriteLine($"{i + 1}. {results[i].DisplayName}");
+            }
+
+            // Prompt for selection
+            Console.WriteLine();
+            Console.Write($"Select a track (1-{results.Count}) or 0 to cancel: ");
+            var selectionInput = Console.ReadLine()?.Trim();
+
+            if (!int.TryParse(selectionInput, out var selection) || selection < 0 || selection > results.Count)
+            {
+                Console.WriteLine("\n❌ Invalid selection.");
+                return;
+            }
+
+            if (selection == 0)
+            {
+                Console.WriteLine("\nCancelled.");
+                return;
+            }
+
+            // Get and display track detail report
+            var trackId = results[selection - 1].TrackId;
+            var report = await _analyticsService.GetTrackDetailReportAsync(trackId);
+
+            if (report == null)
+            {
+                Console.WriteLine($"\n❌ Could not load details for selected track.");
+                return;
+            }
+
+            // Format and display the report
+            var formattedReport = ReportFormatter.FormatTrackDetailReport(report);
+            Console.WriteLine(formattedReport);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error displaying track detail report");
+            Console.WriteLine($"\n❌ Error: {ex.Message}");
+        }
     }
 
     private string GetStatusEmoji(SpotifyTools.Domain.Enums.SyncStatus status)

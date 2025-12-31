@@ -9,6 +9,7 @@ using SpotifyTools.Data.DbContext;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Data.Repositories.Implementations;
 using SpotifyTools.Sync;
+using SpotifyTools.Analytics;
 
 var host = CreateHostBuilder(args).Build();
 
@@ -41,6 +42,9 @@ static IHostBuilder CreateHostBuilder(string[] args) =>
 
             // Sync service
             services.AddScoped<ISyncService, SyncService>();
+
+            // Analytics service
+            services.AddScoped<IAnalyticsService, AnalyticsService>();
 
             // CLI
             services.AddScoped<CliMenuService>();
