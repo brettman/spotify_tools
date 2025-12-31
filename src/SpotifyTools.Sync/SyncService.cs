@@ -154,11 +154,32 @@ public class SyncService : ISyncService
                 }
 
                 // Check if Spotify provided a Retry-After header (in seconds)
-                var retryAfter = ex.Response?.Headers?.ContainsKey("Retry-After") == true
-                    ? int.Parse(ex.Response.Headers["Retry-After"])
-                    : (int)baseDelay.TotalSeconds * retryCount; // Exponential backoff
+                int retryAfterSeconds;
+                if (ex.Response?.Headers?.ContainsKey("Retry-After") == true)
+                {
+                    var retryAfterValue = ex.Response.Headers["Retry-After"];
+                    _logger.LogDebug("Retry-After header value: {RetryAfter}", retryAfterValue);
 
-                var waitTime = TimeSpan.FromSeconds(retryAfter);
+                    if (int.TryParse(retryAfterValue, out retryAfterSeconds))
+                    {
+                        // Cap at 60 seconds max to avoid excessive waits
+                        retryAfterSeconds = Math.Min(retryAfterSeconds, 60);
+                    }
+                    else
+                    {
+                        // If parsing fails, use exponential backoff
+                        retryAfterSeconds = (int)baseDelay.TotalSeconds * retryCount;
+                        _logger.LogWarning("Failed to parse Retry-After header '{Value}', using {Seconds}s",
+                            retryAfterValue, retryAfterSeconds);
+                    }
+                }
+                else
+                {
+                    // No Retry-After header, use exponential backoff (5s, 10s, 15s)
+                    retryAfterSeconds = (int)baseDelay.TotalSeconds * retryCount;
+                }
+
+                var waitTime = TimeSpan.FromSeconds(retryAfterSeconds);
 
                 _logger.LogWarning(
                     "Rate limit hit for {Operation}. Waiting {Seconds}s before retry {Retry}/{Max}",
