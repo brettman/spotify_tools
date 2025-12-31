@@ -147,26 +147,36 @@ public class SyncService : ISyncService
 
                 return result;
             }
-            catch (APITooManyRequestsException)
+            catch (APITooManyRequestsException ex)
             {
                 retryCount++;
+
+                // Log the Retry-After header to see what Spotify is telling us
+                var retryAfterHeader = ex.Response?.Headers?.ContainsKey("Retry-After") == true
+                    ? ex.Response.Headers["Retry-After"]
+                    : "not provided";
+
+                _logger.LogWarning(
+                    "Rate limit hit for {Operation}. Retry-After: {RetryAfter}, Attempt {Retry}/{Max}",
+                    operationName, retryAfterHeader, retryCount, maxRetries);
+
+                if (retryCount > maxRetries)
+                {
+                    _logger.LogError(
+                        "Max retries ({MaxRetries}) exceeded for {Operation}. " +
+                        "This may indicate a daily/hourly quota limit has been reached. " +
+                        "Try again later or reduce sync frequency.",
+                        maxRetries, operationName);
+                    throw;
+                }
 
                 // Trigger global backoff to pause ALL API calls
                 _rateLimiter.TriggerBackoff();
 
-                if (retryCount > maxRetries)
-                {
-                    _logger.LogError("Max retries ({MaxRetries}) exceeded for {Operation}", maxRetries, operationName);
-                    throw;
-                }
+                _logger.LogWarning("Waiting for global backoff before retry {Retry}/{Max}...", retryCount, maxRetries);
 
-                _logger.LogWarning(
-                    "Rate limit hit for {Operation}. Global backoff triggered, retry {Retry}/{Max}",
-                    operationName, retryCount, maxRetries);
-
-                // The global backoff in the rate limiter will handle the wait,
-                // but we add a small additional delay before retry
-                await Task.Delay(TimeSpan.FromSeconds(2));
+                // CRITICAL FIX: Must call WaitAsync() before retry so it respects the global backoff
+                await _rateLimiter.WaitAsync();
             }
             catch (Exception)
             {
