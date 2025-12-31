@@ -135,17 +135,24 @@ public class SyncService : ISyncService
         int maxRetries = 3)
     {
         var retryCount = 0;
-        var baseDelay = TimeSpan.FromSeconds(5);
 
         while (true)
         {
             try
             {
-                return await apiCall();
+                var result = await apiCall();
+
+                // Success! Reset the global backoff counter
+                _rateLimiter.ResetBackoff();
+
+                return result;
             }
-            catch (APITooManyRequestsException ex)
+            catch (APITooManyRequestsException)
             {
                 retryCount++;
+
+                // Trigger global backoff to pause ALL API calls
+                _rateLimiter.TriggerBackoff();
 
                 if (retryCount > maxRetries)
                 {
@@ -153,41 +160,13 @@ public class SyncService : ISyncService
                     throw;
                 }
 
-                // Check if Spotify provided a Retry-After header (in seconds)
-                int retryAfterSeconds;
-                if (ex.Response?.Headers?.ContainsKey("Retry-After") == true)
-                {
-                    var retryAfterValue = ex.Response.Headers["Retry-After"];
-                    _logger.LogDebug("Retry-After header value: {RetryAfter}", retryAfterValue);
-
-                    if (int.TryParse(retryAfterValue, out retryAfterSeconds))
-                    {
-                        // Cap at 60 seconds max to avoid excessive waits
-                        retryAfterSeconds = Math.Min(retryAfterSeconds, 60);
-                    }
-                    else
-                    {
-                        // If parsing fails, use exponential backoff
-                        retryAfterSeconds = (int)baseDelay.TotalSeconds * retryCount;
-                        _logger.LogWarning("Failed to parse Retry-After header '{Value}', using {Seconds}s",
-                            retryAfterValue, retryAfterSeconds);
-                    }
-                }
-                else
-                {
-                    // No Retry-After header, use exponential backoff (5s, 10s, 15s)
-                    retryAfterSeconds = (int)baseDelay.TotalSeconds * retryCount;
-                }
-
-                var waitTime = TimeSpan.FromSeconds(retryAfterSeconds);
-
                 _logger.LogWarning(
-                    "Rate limit hit for {Operation}. Waiting {Seconds}s before retry {Retry}/{Max}",
-                    operationName, waitTime.TotalSeconds, retryCount, maxRetries);
+                    "Rate limit hit for {Operation}. Global backoff triggered, retry {Retry}/{Max}",
+                    operationName, retryCount, maxRetries);
 
-                Console.WriteLine($"⏸  Rate limit hit. Waiting {waitTime.TotalSeconds:F0}s before retry ({retryCount}/{maxRetries})...");
-
-                await Task.Delay(waitTime);
+                // The global backoff in the rate limiter will handle the wait,
+                // but we add a small additional delay before retry
+                await Task.Delay(TimeSpan.FromSeconds(2));
             }
             catch (Exception)
             {
