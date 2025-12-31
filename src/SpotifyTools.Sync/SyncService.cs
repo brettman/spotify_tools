@@ -4,6 +4,7 @@ using SpotifyClientService;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Domain.Entities;
 using SpotifyTools.Domain.Enums;
+using System.Net;
 
 namespace SpotifyTools.Sync;
 
@@ -123,6 +124,56 @@ public class SyncService : ISyncService
             .OrderByDescending(s => s.CompletedAt)
             .FirstOrDefault()
             ?.CompletedAt;
+    }
+
+    /// <summary>
+    /// Executes an API call with automatic retry logic for rate limiting (429 errors)
+    /// </summary>
+    private async Task<T> ExecuteWithRetryAsync<T>(
+        Func<Task<T>> apiCall,
+        string operationName,
+        int maxRetries = 3)
+    {
+        var retryCount = 0;
+        var baseDelay = TimeSpan.FromSeconds(5);
+
+        while (true)
+        {
+            try
+            {
+                return await apiCall();
+            }
+            catch (APITooManyRequestsException ex)
+            {
+                retryCount++;
+
+                if (retryCount > maxRetries)
+                {
+                    _logger.LogError("Max retries ({MaxRetries}) exceeded for {Operation}", maxRetries, operationName);
+                    throw;
+                }
+
+                // Check if Spotify provided a Retry-After header (in seconds)
+                var retryAfter = ex.Response?.Headers?.ContainsKey("Retry-After") == true
+                    ? int.Parse(ex.Response.Headers["Retry-After"])
+                    : (int)baseDelay.TotalSeconds * retryCount; // Exponential backoff
+
+                var waitTime = TimeSpan.FromSeconds(retryAfter);
+
+                _logger.LogWarning(
+                    "Rate limit hit for {Operation}. Waiting {Seconds}s before retry {Retry}/{Max}",
+                    operationName, waitTime.TotalSeconds, retryCount, maxRetries);
+
+                Console.WriteLine($"⏸  Rate limit hit. Waiting {waitTime.TotalSeconds:F0}s before retry ({retryCount}/{maxRetries})...");
+
+                await Task.Delay(waitTime);
+            }
+            catch (Exception)
+            {
+                // Re-throw other exceptions immediately
+                throw;
+            }
+        }
     }
 
     private async Task<int> SyncTracksAsync(CancellationToken cancellationToken)
@@ -311,7 +362,9 @@ public class SyncService : ISyncService
 
             try
             {
-                var spotifyArtist = await _spotifyClient.Client.Artists.Get(artistId);
+                var spotifyArtist = await ExecuteWithRetryAsync(
+                    () => _spotifyClient.Client.Artists.Get(artistId),
+                    $"Artist {artistId}");
 
                 existingArtistsDict.TryGetValue(artistId, out var existingArtist);
 
@@ -398,7 +451,9 @@ public class SyncService : ISyncService
 
             try
             {
-                var spotifyAlbum = await _spotifyClient.Client.Albums.Get(albumId);
+                var spotifyAlbum = await ExecuteWithRetryAsync(
+                    () => _spotifyClient.Client.Albums.Get(albumId),
+                    $"Album {albumId}");
 
                 existingAlbumsDict.TryGetValue(albumId, out var existingAlbum);
 
