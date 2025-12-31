@@ -139,17 +139,21 @@ A tool to fetch Spotify library data (tracks, albums, artists, playlists), store
 - Mode display (Major/Minor)
 - Time signature display (4/4, 3/4, etc.)
 
-**Next Step - Audio Analysis Enhancement:**
-- 📋 **Enhance track detail report with Spotify Audio Analysis data**
-  - Integrate `audio-analysis` endpoint (separate from `audio-features`)
-  - Show section-by-section breakdown with timestamps
-  - Display key changes throughout the song
-  - Show tempo variations across sections
-  - Detect structural changes (verse/chorus/bridge transitions)
-  - Particularly valuable for progressive rock and jazz with time signature changes
-  - Example use case: "Thick as a Brick" by Jethro Tull with multiple key/time changes
-  - Add optional detailed view or separate menu option
-  - Consider storing analysis data in database for offline access
+**Audio Analysis Enhancement:** ✅
+**Completed:** 2025-12-31 (Commit: 71c56fd)
+
+- ✅ AudioAnalysis and AudioAnalysisSection domain entities
+- ✅ EF Core migration for audio_analyses and audio_analysis_sections tables
+- ✅ On-demand audio analysis fetch from Spotify API
+- ✅ Automatic caching in PostgreSQL for offline access
+- ✅ Section-by-section breakdown in Track Detail Report:
+  - ✅ Overall track analysis (tempo, key, mode, time signature)
+  - ✅ Timestamp for each section
+  - ✅ Key changes highlighted with ► indicator
+  - ✅ Tempo variations across sections
+  - ✅ Time signature changes
+  - ✅ Mode (Major/Minor) transitions
+- ✅ Perfect for progressive rock (e.g., Jethro Tull's "Thick as a Brick") and jazz
 
 ---
 
