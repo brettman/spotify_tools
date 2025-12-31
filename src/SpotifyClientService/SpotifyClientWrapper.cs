@@ -13,6 +13,7 @@ public class SpotifyClientWrapper : ISpotifyClientService
     private readonly IConfiguration _configuration;
     private SpotifyClient? _client;
     private string? _userId;
+    private AuthorizationCodeTokenResponse? _tokenResponse;
 
     public SpotifyClient Client
     {
@@ -71,7 +72,28 @@ public class SpotifyClientWrapper : ISpotifyClientService
                 )
             );
 
-            _client = new SpotifyClient(tokenResponse.AccessToken);
+            // Store the token response for refresh capability
+            _tokenResponse = tokenResponse;
+
+            // Create authenticator that will automatically refresh tokens
+            var authenticator = new AuthorizationCodeAuthenticator(
+                clientId!,
+                clientSecret!,
+                tokenResponse
+            );
+
+            // Configure automatic token refresh
+            authenticator.TokenRefreshed += (sender, token) =>
+            {
+                _tokenResponse = token;
+                Console.WriteLine("🔄 Access token automatically refreshed");
+            };
+
+            var clientConfig = SpotifyClientConfig
+                .CreateDefault()
+                .WithAuthenticator(authenticator);
+
+            _client = new SpotifyClient(clientConfig);
 
             // Get user profile
             var profile = await _client.UserProfile.Current();
