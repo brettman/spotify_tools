@@ -55,7 +55,8 @@ public class SyncService : ISyncService
                 await _spotifyClient.AuthenticateAsync();
             }
 
-            // Sync in order: Tracks -> Artists -> Albums -> Audio Features -> Playlists
+            // Sync in order: Tracks -> Artists -> Albums -> Playlists
+            // Audio Features disabled (batch API deprecated, individual calls too slow)
             var stats = new SyncStats();
 
             OnProgressChanged("Tracks", 0, 0, "Fetching saved tracks...");
@@ -67,8 +68,12 @@ public class SyncService : ISyncService
             OnProgressChanged("Albums", 0, 0, "Fetching album details...");
             stats.AlbumsProcessed = await SyncAlbumsAsync(cancellationToken);
 
-            OnProgressChanged("Audio Features", 0, 0, "Fetching audio features...");
-            stats.AudioFeaturesProcessed = await SyncAudioFeaturesAsync(cancellationToken);
+            // Audio Features sync disabled - Spotify deprecated batch endpoint
+            // Individual fetching would take ~115 minutes for 3,463 tracks (30 req/min)
+            // Audio features still available on-demand via analytics
+            // OnProgressChanged("Audio Features", 0, 0, "Fetching audio features...");
+            // stats.AudioFeaturesProcessed = await SyncAudioFeaturesAsync(cancellationToken);
+            stats.AudioFeaturesProcessed = 0;
 
             OnProgressChanged("Playlists", 0, 0, "Fetching playlists...");
             stats.PlaylistsProcessed = await SyncPlaylistsAsync(cancellationToken);
@@ -96,10 +101,8 @@ public class SyncService : ISyncService
             await _unitOfWork.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Full sync completed successfully. Tracks: {Tracks}, Artists: {Artists}, Albums: {Albums}, " +
-                "Audio Features: {AudioFeatures}, Playlists: {Playlists}",
-                stats.TracksProcessed, stats.ArtistsProcessed, stats.AlbumsProcessed,
-                stats.AudioFeaturesProcessed, stats.PlaylistsProcessed);
+                "Full sync completed successfully. Tracks: {Tracks}, Artists: {Artists}, Albums: {Albums}, Playlists: {Playlists}",
+                stats.TracksProcessed, stats.ArtistsProcessed, stats.AlbumsProcessed, stats.PlaylistsProcessed);
 
             OnProgressChanged("Complete", 1, 1, "Sync completed successfully!");
 

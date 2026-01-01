@@ -169,8 +169,8 @@ public class CliMenuService
         Console.WriteLine("  1. Tracks");
         Console.WriteLine("  2. Artists");
         Console.WriteLine("  3. Albums");
-        Console.WriteLine("  4. Audio Features");
-        Console.WriteLine("  5. Playlists");
+        Console.WriteLine("  4. Playlists");
+        Console.WriteLine("  5. Audio Features (disabled - API deprecated)");
         Console.WriteLine("  6. Back to main menu");
         Console.WriteLine();
         Console.Write("Select an option (1-6): ");
@@ -182,15 +182,17 @@ public class CliMenuService
             "1" => () => _syncService.SyncTracksOnlyAsync(),
             "2" => () => _syncService.SyncArtistsOnlyAsync(),
             "3" => () => _syncService.SyncAlbumsOnlyAsync(),
-            "4" => () => _syncService.SyncAudioFeaturesOnlyAsync(),
-            "5" => () => _syncService.SyncPlaylistsOnlyAsync(),
+            "4" => () => _syncService.SyncPlaylistsOnlyAsync(),
+            "5" => null, // Audio Features disabled
             "6" => null,
             _ => null
         };
 
         if (syncAction == null)
         {
-            if (choice != "6")
+            if (choice == "5")
+                Console.WriteLine("\n❌ Audio Features sync is disabled (Spotify API deprecated).");
+            else if (choice != "6")
                 Console.WriteLine("\n❌ Invalid choice.");
             return;
         }
@@ -200,8 +202,7 @@ public class CliMenuService
             "1" => "Tracks",
             "2" => "Artists",
             "3" => "Albums",
-            "4" => "Audio Features",
-            "5" => "Playlists",
+            "4" => "Playlists",
             _ => "Unknown"
         };
 
