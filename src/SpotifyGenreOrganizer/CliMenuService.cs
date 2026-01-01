@@ -89,30 +89,23 @@ public class CliMenuService
 
     private void ShowWelcome()
     {
-        Console.WriteLine("╔════════════════════════════════════════╗");
-        Console.WriteLine("║     Spotify Tools - CLI Interface     ║");
-        Console.WriteLine("╠════════════════════════════════════════╣");
-        Console.WriteLine("║  Sync your Spotify library to          ║");
-        Console.WriteLine("║  PostgreSQL for analytics              ║");
-        Console.WriteLine("╚════════════════════════════════════════╝");
-        Console.WriteLine();
+        var title = new FigletText("Spotify Tools")
+            .Centered()
+            .Color(Color.Cyan1);
+
+        AnsiConsole.Write(title);
+
+        var subtitle = new Panel(new Markup(
+            "[cyan]Sync your Spotify library to PostgreSQL for analytics[/]\n" +
+            "[dim]Interactive CLI powered by Spectre.Console[/]"))
+            .Border(BoxBorder.Rounded)
+            .BorderColor(Color.Cyan)
+            .Padding(1, 0);
+
+        AnsiConsole.Write(subtitle);
+        AnsiConsole.WriteLine();
     }
 
-    private void ShowMainMenu()
-    {
-        Console.WriteLine("\n┌────────────────────────────────────────┐");
-        Console.WriteLine("│           Main Menu                    │");
-        Console.WriteLine("├────────────────────────────────────────┤");
-        Console.WriteLine("│  1. Full Sync (Import all data)       │");
-        Console.WriteLine("│  2. Partial Sync (Select stages)      │");
-        Console.WriteLine("│  3. View Last Sync Status              │");
-        Console.WriteLine("│  4. View Sync History                  │");
-        Console.WriteLine("│  5. Track Detail Report                │");
-        Console.WriteLine("│  6. Test Artist API (Debug)            │");
-        Console.WriteLine("│  7. Exit                               │");
-        Console.WriteLine("└────────────────────────────────────────┘");
-        Console.Write("\nSelect an option (1-7): ");
-    }
 
     private async Task FullSyncAsync()
     {
@@ -164,96 +157,74 @@ public class CliMenuService
 
     private async Task PartialSyncAsync()
     {
-        Console.WriteLine("\n╔════════════════════════════════════════╗");
-        Console.WriteLine("║         Partial Sync                   ║");
-        Console.WriteLine("╚════════════════════════════════════════╝");
-        Console.WriteLine();
-        Console.WriteLine("Select which stage to sync:");
-        Console.WriteLine();
-        Console.WriteLine("  1. Tracks");
-        Console.WriteLine("  2. Artists");
-        Console.WriteLine("  3. Albums");
-        Console.WriteLine("  4. Playlists");
-        Console.WriteLine("  5. Audio Features (disabled - API deprecated)");
-        Console.WriteLine("  6. Back to main menu");
-        Console.WriteLine();
-        Console.Write("Select an option (1-6): ");
+        AnsiConsole.Write(new Rule("[yellow bold]Partial Sync[/]").RuleStyle("yellow"));
+        AnsiConsole.WriteLine();
 
-        var choice = Console.ReadLine()?.Trim();
+        var choice = MenuBuilder.ShowPartialSyncMenu();
 
-        Func<Task<int>>? syncAction = choice switch
+        if (choice == "Back to Main Menu")
         {
-            "1" => () => _syncService.SyncTracksOnlyAsync(),
-            "2" => () => _syncService.SyncArtistsOnlyAsync(),
-            "3" => () => _syncService.SyncAlbumsOnlyAsync(),
-            "4" => () => _syncService.SyncPlaylistsOnlyAsync(),
-            "5" => null, // Audio Features disabled
-            "6" => null,
-            _ => null
+            return;
+        }
+
+        if (choice.Contains("disabled"))
+        {
+            AnsiConsole.MarkupLine("[red]❌ Audio Features sync is disabled (Spotify API deprecated).[/]");
+            return;
+        }
+
+        // Map choice to sync action and stage name
+        var (syncAction, stageName) = choice switch
+        {
+            "Tracks" => ((Func<Task<int>>)(() => _syncService.SyncTracksOnlyAsync()), "Tracks"),
+            "Artists" => ((Func<Task<int>>)(() => _syncService.SyncArtistsOnlyAsync()), "Artists"),
+            "Albums" => ((Func<Task<int>>)(() => _syncService.SyncAlbumsOnlyAsync()), "Albums"),
+            "Playlists" => ((Func<Task<int>>)(() => _syncService.SyncPlaylistsOnlyAsync()), "Playlists"),
+            _ => ((Func<Task<int>>?)null, "Unknown")!
         };
 
         if (syncAction == null)
         {
-            if (choice == "5")
-                Console.WriteLine("\n❌ Audio Features sync is disabled (Spotify API deprecated).");
-            else if (choice != "6")
-                Console.WriteLine("\n❌ Invalid choice.");
+            AnsiConsole.MarkupLine("[red]❌ Invalid choice.[/]");
             return;
         }
 
-        var stageName = choice switch
-        {
-            "1" => "Tracks",
-            "2" => "Artists",
-            "3" => "Albums",
-            "4" => "Playlists",
-            _ => "Unknown"
-        };
-
-        Console.WriteLine($"\n🔄 Starting {stageName} sync...");
-        Console.WriteLine();
-
-        // Subscribe to progress events
-        _syncService.ProgressChanged += OnSyncProgress;
+        AnsiConsole.MarkupLine($"\n[cyan]Starting {stageName.EscapeMarkup()} sync...[/]");
+        AnsiConsole.MarkupLine("[dim]This may take a while depending on your library size.[/]\n");
 
         var startTime = DateTime.Now;
 
         try
         {
-            var count = await syncAction();
+            using var progressAdapter = new ProgressAdapter(_syncService);
+            var count = await progressAdapter.RunWithProgressAsync(
+                syncAction,
+                $"Syncing {stageName}..."
+            );
+
             var duration = DateTime.Now - startTime;
 
-            Console.WriteLine($"\n✓ {stageName} sync completed! Processed: {count}");
-            Console.WriteLine($"⏱  Duration: {duration:hh\\:mm\\:ss}");
+            AnsiConsole.MarkupLine($"\n[green]✓ {stageName.EscapeMarkup()} sync completed![/] Processed: {count}");
+            AnsiConsole.MarkupLine($"[yellow]⏱  Duration:[/] {duration:hh\\:mm\\:ss}");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "{Stage} sync failed", stageName);
-            Console.WriteLine($"\n❌ Sync failed: {ex.Message}");
-        }
-        finally
-        {
-            _syncService.ProgressChanged -= OnSyncProgress;
+            AnsiConsole.MarkupLine($"\n[red]❌ Sync failed: {ex.Message.EscapeMarkup()}[/]");
         }
     }
 
-    private void OnSyncProgress(object? sender, SyncProgressEventArgs e)
-    {
-        var percentage = e.Total > 0 ? (e.Current * 100 / e.Total) : 0;
-        Console.WriteLine($"  [{e.Stage}] {e.Message} ({percentage}%)");
-    }
 
     private async Task ViewLastSyncStatusAsync()
     {
-        Console.WriteLine("\n╔════════════════════════════════════════╗");
-        Console.WriteLine("║        Last Sync Status                ║");
-        Console.WriteLine("╚════════════════════════════════════════╝\n");
+        AnsiConsole.Write(new Rule("[cyan bold]Last Sync Status[/]").RuleStyle("cyan"));
+        AnsiConsole.WriteLine();
 
         var lastSyncDate = await _syncService.GetLastSyncDateAsync();
 
         if (lastSyncDate == null)
         {
-            Console.WriteLine("No sync has been completed yet.");
+            AnsiConsole.MarkupLine("[yellow]No sync has been completed yet.[/]");
             return;
         }
 
@@ -263,30 +234,55 @@ public class CliMenuService
 
         if (syncHistory == null)
         {
-            Console.WriteLine("No sync history found.");
+            AnsiConsole.MarkupLine("[yellow]No sync history found.[/]");
             return;
         }
 
-        Console.WriteLine($"Last Sync: {syncHistory.CompletedAt?.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
-        Console.WriteLine($"Status: {GetStatusEmoji(syncHistory.Status)} {syncHistory.Status}");
-        Console.WriteLine($"Type: {syncHistory.SyncType}");
-        Console.WriteLine();
-        Console.WriteLine("Statistics:");
-        Console.WriteLine($"  • Tracks Added: {syncHistory.TracksAdded}");
-        Console.WriteLine($"  • Tracks Updated: {syncHistory.TracksUpdated}");
-        Console.WriteLine($"  • Artists Added: {syncHistory.ArtistsAdded}");
-        Console.WriteLine($"  • Albums Added: {syncHistory.AlbumsAdded}");
-        Console.WriteLine($"  • Playlists Synced: {syncHistory.PlaylistsSynced}");
+        // Build status content
+        var statusMarkup = GetStatusMarkup(syncHistory.Status);
+        var duration = syncHistory.CompletedAt - syncHistory.StartedAt;
 
+        var summaryContent = new Markup(
+            $"[bold]Last Sync:[/] {syncHistory.CompletedAt?.ToLocalTime():yyyy-MM-dd HH:mm:ss}\n" +
+            $"[bold]Status:[/] {statusMarkup}\n" +
+            $"[bold]Type:[/] {syncHistory.SyncType}\n" +
+            $"[bold]Duration:[/] {(duration.HasValue ? duration.Value.ToString(@"hh\:mm\:ss") : "[dim]N/A[/]")}"
+        );
+
+        var summaryPanel = new Panel(summaryContent)
+            .Border(BoxBorder.Rounded)
+            .BorderColor(Color.Cyan)
+            .Header("[cyan bold]📊 Summary[/]");
+
+        AnsiConsole.Write(summaryPanel);
+        AnsiConsole.WriteLine();
+
+        // Statistics Table
+        var statsTable = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Green)
+            .Title("[green bold]📈 Statistics[/]")
+            .AddColumn(new TableColumn("[cyan]Metric[/]").LeftAligned())
+            .AddColumn(new TableColumn("[yellow]Count[/]").RightAligned());
+
+        statsTable.AddRow("Tracks Added", syncHistory.TracksAdded.ToString());
+        statsTable.AddRow("Tracks Updated", syncHistory.TracksUpdated.ToString());
+        statsTable.AddRow("Artists Added", syncHistory.ArtistsAdded.ToString());
+        statsTable.AddRow("Albums Added", syncHistory.AlbumsAdded.ToString());
+        statsTable.AddRow("Playlists Synced", syncHistory.PlaylistsSynced.ToString());
+
+        AnsiConsole.Write(statsTable);
+
+        // Error Panel (if present)
         if (!string.IsNullOrEmpty(syncHistory.ErrorMessage))
         {
-            Console.WriteLine($"\nError: {syncHistory.ErrorMessage}");
-        }
+            AnsiConsole.WriteLine();
+            var errorPanel = new Panel(new Markup($"[red]{syncHistory.ErrorMessage.EscapeMarkup()}[/]"))
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Red)
+                .Header("[red bold]❌ Error[/]");
 
-        var duration = syncHistory.CompletedAt - syncHistory.StartedAt;
-        if (duration.HasValue)
-        {
-            Console.WriteLine($"\nDuration: {duration.Value:hh\\:mm\\:ss}");
+            AnsiConsole.Write(errorPanel);
         }
     }
 
@@ -334,38 +330,39 @@ public class CliMenuService
 
     private async Task TestArtistApiAsync()
     {
-        Console.WriteLine("\n╔════════════════════════════════════════╗");
-        Console.WriteLine("║      Test Artist API (Debug)           ║");
-        Console.WriteLine("╚════════════════════════════════════════╝");
-        Console.WriteLine();
+        AnsiConsole.Write(new Rule("[magenta bold]Test Artist API (Debug)[/]").RuleStyle("magenta"));
+        AnsiConsole.WriteLine();
 
         // Authenticate first
-        Console.WriteLine("🔐 Authenticating with Spotify...");
-        if (!_spotifyClient.IsAuthenticated)
-        {
-            await _spotifyClient.AuthenticateAsync();
-        }
-        else
-        {
-            Console.WriteLine("✓ Already authenticated");
-        }
-        Console.WriteLine();
+        await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync("🔐 Authenticating with Spotify...", async ctx =>
+            {
+                if (!_spotifyClient.IsAuthenticated)
+                {
+                    await _spotifyClient.AuthenticateAsync();
+                    ctx.Status("✓ Authenticated");
+                }
+                else
+                {
+                    ctx.Status("✓ Already authenticated");
+                }
+                await Task.Delay(500);
+            });
+
+        AnsiConsole.WriteLine();
 
         // Prompt for artist ID or use default
-        Console.WriteLine("Enter an artist Spotify ID to test");
-        Console.WriteLine("(or press Enter to use default: 0OdUWJ0sBjDrqHygGUXeCF - Band of Horses)");
-        Console.Write("> ");
-        var artistId = Console.ReadLine()?.Trim();
+        var artistId = AnsiConsole.Prompt(
+            new TextPrompt<string>("[cyan]Enter artist Spotify ID[/] [dim](or press Enter for default)[/]:")
+                .PromptStyle("green")
+                .AllowEmpty()
+                .DefaultValue("0OdUWJ0sBjDrqHygGUXeCF")
+                .DefaultValueStyle("dim")
+        );
 
-        if (string.IsNullOrWhiteSpace(artistId))
-        {
-            artistId = "0OdUWJ0sBjDrqHygGUXeCF"; // Band of Horses
-        }
-
-        Console.WriteLine();
-        Console.WriteLine($"🧪 Testing Artist API with ID: {artistId}");
-        Console.WriteLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        Console.WriteLine();
+        AnsiConsole.MarkupLine($"\n[cyan]🧪 Testing Artist API with ID:[/] [yellow]{artistId.EscapeMarkup()}[/]");
+        AnsiConsole.WriteLine();
 
         try
         {
@@ -373,75 +370,86 @@ public class CliMenuService
             var artist = await _spotifyClient.Client.Artists.Get(artistId);
             var duration = DateTime.Now - startTime;
 
-            Console.WriteLine("✓ SUCCESS!");
-            Console.WriteLine();
-            Console.WriteLine($"Artist: {artist.Name}");
-            Console.WriteLine($"Popularity: {artist.Popularity}");
-            Console.WriteLine($"Followers: {artist.Followers.Total:N0}");
-            Console.WriteLine($"Genres: {string.Join(", ", artist.Genres)}");
-            Console.WriteLine($"Response Time: {duration.TotalMilliseconds:F0}ms");
-            Console.WriteLine();
-            Console.WriteLine("✓ API is working - no rate limit issues detected");
+            // Success Panel
+            var successContent = new Markup(
+                $"[bold]Artist:[/] {artist.Name.EscapeMarkup()}\n" +
+                $"[bold]Popularity:[/] {artist.Popularity}\n" +
+                $"[bold]Followers:[/] {artist.Followers.Total:N0}\n" +
+                $"[bold]Genres:[/] {string.Join(", ", artist.Genres).EscapeMarkup()}\n" +
+                $"[bold]Response Time:[/] [green]{duration.TotalMilliseconds:F0}ms[/]"
+            );
+
+            var successPanel = new Panel(successContent)
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Green)
+                .Header("[green bold]✓ SUCCESS[/]");
+
+            AnsiConsole.Write(successPanel);
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[green]✓ API is working - no rate limit issues detected[/]");
         }
         catch (SpotifyAPI.Web.APITooManyRequestsException ex)
         {
-            Console.WriteLine("❌ RATE LIMIT ERROR (429)");
-            Console.WriteLine();
-
-            // Try to get Retry-After header
+            // Rate Limit Error Panel
             var retryAfter = "not provided";
             if (ex.Response?.Headers?.ContainsKey("Retry-After") == true)
             {
                 retryAfter = ex.Response.Headers["Retry-After"];
             }
 
-            Console.WriteLine($"Retry-After Header: {retryAfter}");
-            Console.WriteLine();
+            var errorContent = $"[bold]Retry-After Header:[/] {retryAfter.EscapeMarkup()}\n\n";
 
             if (int.TryParse(retryAfter, out var retrySeconds))
             {
                 var hours = retrySeconds / 3600.0;
                 if (hours >= 1)
                 {
-                    Console.WriteLine($"⚠️  DAILY QUOTA LIMIT DETECTED!");
-                    Console.WriteLine($"   Spotify wants you to wait {hours:F1} hours ({retrySeconds:N0} seconds)");
-                    Console.WriteLine();
-                    Console.WriteLine("This indicates you've hit a daily API quota limit, not just rate limiting.");
-                    Console.WriteLine("You'll need to wait until the quota resets (typically 24 hours).");
+                    errorContent += $"[yellow bold]⚠️  DAILY QUOTA LIMIT DETECTED![/]\n" +
+                                   $"Spotify wants you to wait {hours:F1} hours ({retrySeconds:N0} seconds)\n\n" +
+                                   $"[dim]This indicates you've hit a daily API quota limit, not just rate limiting.\n" +
+                                   $"You'll need to wait until the quota resets (typically 24 hours).[/]";
                 }
                 else
                 {
-                    Console.WriteLine($"Rate limit retry after: {retrySeconds} seconds");
+                    errorContent += $"Rate limit retry after: {retrySeconds} seconds";
                 }
             }
             else
             {
-                Console.WriteLine($"Could not parse Retry-After value: {retryAfter}");
+                errorContent += $"Could not parse Retry-After value: {retryAfter.EscapeMarkup()}";
             }
 
-            Console.WriteLine();
-            Console.WriteLine("Full error:");
-            Console.WriteLine(ex.Message);
+            errorContent += $"\n\n[dim]Full error:[/]\n{ex.Message.EscapeMarkup()}";
+
+            var errorPanel = new Panel(new Markup(errorContent))
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Red)
+                .Header("[red bold]❌ RATE LIMIT ERROR (429)[/]");
+
+            AnsiConsole.Write(errorPanel);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"❌ ERROR: {ex.GetType().Name}");
-            Console.WriteLine($"Message: {ex.Message}");
-        }
+            var errorPanel = new Panel(new Markup(
+                $"[bold]Type:[/] {ex.GetType().Name.EscapeMarkup()}\n" +
+                $"[bold]Message:[/] {ex.Message.EscapeMarkup()}"))
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Red)
+                .Header("[red bold]❌ ERROR[/]");
 
-        Console.WriteLine();
-        Console.WriteLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            AnsiConsole.Write(errorPanel);
+        }
     }
 
-    private string GetStatusEmoji(SpotifyTools.Domain.Enums.SyncStatus status)
+    private string GetStatusMarkup(SpotifyTools.Domain.Enums.SyncStatus status)
     {
         return status switch
         {
-            SpotifyTools.Domain.Enums.SyncStatus.Success => "✓",
-            SpotifyTools.Domain.Enums.SyncStatus.Failed => "❌",
-            SpotifyTools.Domain.Enums.SyncStatus.InProgress => "🔄",
-            SpotifyTools.Domain.Enums.SyncStatus.Partial => "⚠",
-            _ => "?"
+            SpotifyTools.Domain.Enums.SyncStatus.Success => "[green]✓ Success[/]",
+            SpotifyTools.Domain.Enums.SyncStatus.Failed => "[red]❌ Failed[/]",
+            SpotifyTools.Domain.Enums.SyncStatus.InProgress => "[yellow]🔄 In Progress[/]",
+            SpotifyTools.Domain.Enums.SyncStatus.Partial => "[yellow]⚠ Partial[/]",
+            _ => "[dim]? Unknown[/]"
         };
     }
 }

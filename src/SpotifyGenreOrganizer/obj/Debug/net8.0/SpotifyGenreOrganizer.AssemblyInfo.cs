@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SpotifyGenreOrganizer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f384f831efd2a7f4dd483783cb26eb1764be1173")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0801f3710becf1d725f930156540caaa1261d959")]
 [assembly: System.Reflection.AssemblyProductAttribute("SpotifyGenreOrganizer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SpotifyGenreOrganizer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
