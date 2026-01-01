@@ -113,46 +113,49 @@ public class CliMenuService
 
     private async Task FullSyncAsync()
     {
-        Console.WriteLine("\n╔════════════════════════════════════════╗");
-        Console.WriteLine("║           Full Sync                    ║");
-        Console.WriteLine("╚════════════════════════════════════════╝");
+        AnsiConsole.Write(new Rule("[green bold]Full Sync[/]").RuleStyle("green"));
+        AnsiConsole.WriteLine();
 
         // Authenticate first
-        Console.WriteLine("\n🔐 Authenticating with Spotify...");
-        if (!_spotifyClient.IsAuthenticated)
-        {
-            await _spotifyClient.AuthenticateAsync();
-        }
-        else
-        {
-            Console.WriteLine("✓ Already authenticated");
-        }
+        await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync("🔐 Authenticating with Spotify...", async ctx =>
+            {
+                if (!_spotifyClient.IsAuthenticated)
+                {
+                    await _spotifyClient.AuthenticateAsync();
+                    ctx.Status("✓ Authenticated");
+                }
+                else
+                {
+                    ctx.Status("✓ Already authenticated");
+                }
+                await Task.Delay(500); // Brief pause to show status
+            });
 
-        // Subscribe to progress events
-        _syncService.ProgressChanged += OnSyncProgress;
-
-        Console.WriteLine("\n🔄 Starting full sync...");
-        Console.WriteLine("This may take a while depending on your library size.");
-        Console.WriteLine("Rate limited to 60 requests/minute to respect Spotify API limits.\n");
+        AnsiConsole.MarkupLine("\n[cyan]Starting full sync...[/]");
+        AnsiConsole.MarkupLine("[dim]This may take a while depending on your library size.[/]");
+        AnsiConsole.MarkupLine("[dim]Rate limited to 30 requests/minute to respect Spotify API limits.[/]\n");
 
         var startTime = DateTime.Now;
 
         try
         {
-            var syncId = await _syncService.FullSyncAsync();
+            using var progressAdapter = new ProgressAdapter(_syncService);
+            var syncId = await progressAdapter.RunWithProgressAsync(
+                async () => await _syncService.FullSyncAsync(),
+                "Initializing full sync..."
+            );
+
             var duration = DateTime.Now - startTime;
 
-            Console.WriteLine($"\n✓ Sync completed successfully! (ID: {syncId})");
-            Console.WriteLine($"⏱  Duration: {duration:hh\\:mm\\:ss}");
+            AnsiConsole.MarkupLine($"\n[green]✓ Sync completed successfully![/] (ID: {syncId})");
+            AnsiConsole.MarkupLine($"[yellow]⏱  Duration:[/] {duration:hh\\:mm\\:ss}");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Full sync failed");
-            Console.WriteLine($"\n❌ Sync failed: {ex.Message}");
-        }
-        finally
-        {
-            _syncService.ProgressChanged -= OnSyncProgress;
+            AnsiConsole.MarkupLine($"\n[red]❌ Sync failed: {ex.Message.EscapeMarkup()}[/]");
         }
     }
 
@@ -286,37 +289,14 @@ public class CliMenuService
 
     private async Task ViewSyncHistoryAsync()
     {
-        Console.WriteLine("\n╔════════════════════════════════════════╗");
-        Console.WriteLine("║          Sync History                  ║");
-        Console.WriteLine("╚════════════════════════════════════════╝\n");
+        AnsiConsole.WriteLine();
 
         var history = (await _unitOfWork.SyncHistory.GetAllAsync())
             .OrderByDescending(s => s.StartedAt)
             .Take(10)
             .ToList();
 
-        if (!history.Any())
-        {
-            Console.WriteLine("No sync history found.");
-            return;
-        }
-
-        Console.WriteLine("Last 10 syncs:\n");
-        Console.WriteLine("┌──────┬─────────────────────┬──────────┬────────┬────────────┐");
-        Console.WriteLine("│ ID   │ Date                │ Type     │ Status │ Tracks     │");
-        Console.WriteLine("├──────┼─────────────────────┼──────────┼────────┼────────────┤");
-
-        foreach (var sync in history)
-        {
-            var date = sync.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-            var type = sync.SyncType.ToString().PadRight(8);
-            var status = $"{GetStatusEmoji(sync.Status)} {sync.Status}".PadRight(10);
-            var tracks = $"{sync.TracksAdded}".PadLeft(10);
-
-            Console.WriteLine($"│ {sync.Id,-4} │ {date,-19} │ {type} │ {status} │ {tracks} │");
-        }
-
-        Console.WriteLine("└──────┴─────────────────────┴──────────┴────────┴────────────┘");
+        SpectreReportFormatter.RenderSyncHistoryTable(history);
     }
 
     private async Task ShowTrackDetailAsync()
