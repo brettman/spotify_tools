@@ -634,68 +634,15 @@ public class SyncService : ISyncService
             }
             catch (APIException apiEx)
             {
-                _logger.LogError(apiEx, "Audio features API error at batch {Index}. Response: {Response}",
+                _logger.LogError(apiEx, "Audio features API error at batch {Index}. Response: {Response}. Stopping to preserve API quota.",
                     i, apiEx.Response?.Body ?? "No response body");
-                throw; // Re-throw to stop sync - this is a systemic issue, not a track-specific problem
+                throw; // Re-throw to stop sync immediately - systemic issue
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Batch failed at index {Index}. Attempting individual track processing to identify problematic tracks. First few IDs: {Sample}",
-                    i, string.Join(", ", batch.Take(5)));
-
-                // Fallback: Try processing tracks individually to identify and skip problematic ones
-                foreach (var trackId in batch)
-                {
-                    try
-                    {
-                        await _rateLimiter.WaitAsync();
-
-                        var singleRequest = new TracksAudioFeaturesRequest(new List<string> { trackId });
-                        var singleResponse = await ExecuteWithRetryAsync(
-                            () => _spotifyClient.Client.Tracks.GetSeveralAudioFeatures(singleRequest),
-                            $"Audio features for track {trackId}");
-
-                        var af = singleResponse.AudioFeatures.FirstOrDefault();
-                        if (af == null)
-                        {
-                            _logger.LogDebug("Track {TrackId} has no audio features (likely podcast/local file)", trackId);
-                            continue;
-                        }
-
-                        var audioFeatures = new AudioFeatures
-                        {
-                            TrackId = af.Id,
-                            Acousticness = af.Acousticness,
-                            Danceability = af.Danceability,
-                            Energy = af.Energy,
-                            Instrumentalness = af.Instrumentalness,
-                            Key = af.Key,
-                            Liveness = af.Liveness,
-                            Loudness = af.Loudness,
-                            Mode = af.Mode,
-                            Speechiness = af.Speechiness,
-                            Tempo = af.Tempo,
-                            TimeSignature = af.TimeSignature,
-                            Valence = af.Valence
-                        };
-
-                        await _unitOfWork.AudioFeatures.AddAsync(audioFeatures);
-                        audioFeaturesProcessed++;
-
-                        if (audioFeaturesProcessed % 10 == 0)
-                        {
-                            await _unitOfWork.SaveChangesAsync();
-                        }
-                    }
-                    catch (Exception individualEx)
-                    {
-                        _logger.LogWarning(individualEx, "Failed to fetch audio features for individual track {TrackId}. Skipping.", trackId);
-                    }
-                }
-
-                await _unitOfWork.SaveChangesAsync();
-                OnProgressChanged("Audio Features", audioFeaturesProcessed, total,
-                    $"Processed {audioFeaturesProcessed} of {total} audio features (recovered from batch failure)");
+                _logger.LogError(ex, "Batch failed at index {Index}. Stopping to preserve API quota. Error: {Error}",
+                    i, ex.Message);
+                throw; // Stop immediately on any error to preserve API quota
             }
         }
 
