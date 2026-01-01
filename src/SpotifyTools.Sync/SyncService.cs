@@ -528,9 +528,16 @@ public class SyncService : ISyncService
         var trackIds = tracks
             .Where(t => !existingTrackIds.Contains(t.Id))
             .Select(t => t.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id)) // Filter out null/empty IDs
             .ToList();
 
         var total = trackIds.Count;
+
+        if (total == 0)
+        {
+            _logger.LogInformation("No new tracks need audio features");
+            return 0;
+        }
 
         // Process in batches of 100 (Spotify API limit)
         const int batchSize = 100;
@@ -544,7 +551,9 @@ public class SyncService : ISyncService
             try
             {
                 var request = new TracksAudioFeaturesRequest(batch);
-                var audioFeaturesResponse = await _spotifyClient.Client.Tracks.GetSeveralAudioFeatures(request);
+                var audioFeaturesResponse = await ExecuteWithRetryAsync(
+                    () => _spotifyClient.Client.Tracks.GetSeveralAudioFeatures(request),
+                    $"Audio features batch starting at {i}");
 
                 foreach (var af in audioFeaturesResponse.AudioFeatures)
                 {
