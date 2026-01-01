@@ -1,5 +1,6 @@
 using Spectre.Console;
 using SpotifyTools.Analytics;
+using SpotifyTools.Domain.Entities;
 
 namespace SpotifyGenreOrganizer.UI;
 
@@ -16,7 +17,7 @@ public class NavigationService
     }
 
     /// <summary>
-    /// Navigation flow: Artist → Tracks → Track Detail
+    /// Navigation flow: View All Artists Table → Search/Select → Tracks → Track Detail
     /// </summary>
     public async Task NavigateByArtistAsync()
     {
@@ -26,12 +27,60 @@ public class NavigationService
             AnsiConsole.Write(new Rule("[green]Browse by Artist[/]").RuleStyle("green"));
             AnsiConsole.WriteLine();
 
-            // Step 1: Get all artists
+            // Step 1: Get all artists and show comprehensive table
             var artists = await _analyticsService.GetAllArtistsSortedByPopularityAsync();
 
-            // Step 2: User selects artist
-            var selectedArtist = MenuBuilder.SelectArtist(artists);
-            if (selectedArtist == null) return; // Back pressed
+            if (!artists.Any())
+            {
+                AnsiConsole.MarkupLine("[yellow]No artists found in database.[/]");
+                AnsiConsole.MarkupLine("\n[dim]Press any key to go back...[/]");
+                Console.ReadKey(intercept: true);
+                return;
+            }
+
+            // Show full table for visualization
+            SpectreReportFormatter.RenderArtistsTable(artists);
+            AnsiConsole.WriteLine();
+
+            // Step 2: Search/filter to select artist
+            var searchTerm = AnsiConsole.Prompt(
+                new TextPrompt<string>("[cyan]Enter artist name to view tracks[/] [dim](or 'back' to return)[/]:")
+                    .PromptStyle("green")
+                    .AllowEmpty()
+            );
+
+            if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Equals("back", StringComparison.OrdinalIgnoreCase))
+            {
+                return; // Back to main menu
+            }
+
+            // Filter artists by search term
+            var matches = artists
+                .Where(a => a.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Name)
+                .ToList();
+
+            if (!matches.Any())
+            {
+                AnsiConsole.MarkupLine($"\n[red]No artists found matching '{searchTerm.EscapeMarkup()}'[/]");
+                AnsiConsole.MarkupLine("[dim]Press any key to try again...[/]");
+                Console.ReadKey(intercept: true);
+                continue;
+            }
+
+            // If multiple matches, let user select
+            Artist selectedArtist;
+            if (matches.Count == 1)
+            {
+                selectedArtist = matches[0];
+                AnsiConsole.MarkupLine($"\n[green]Selected:[/] {selectedArtist.Name.EscapeMarkup()}");
+            }
+            else
+            {
+                AnsiConsole.WriteLine();
+                selectedArtist = MenuBuilder.SelectArtist(matches)!;
+                if (selectedArtist == null) continue; // Back to search
+            }
 
             // Step 3: Get tracks for this artist
             AnsiConsole.Clear();
@@ -62,7 +111,7 @@ public class NavigationService
     }
 
     /// <summary>
-    /// Navigation flow: Playlist → Tracks → Track Detail
+    /// Navigation flow: View All Playlists Table → Search/Select → Tracks → Track Detail
     /// </summary>
     public async Task NavigateByPlaylistAsync()
     {
@@ -72,12 +121,60 @@ public class NavigationService
             AnsiConsole.Write(new Rule("[blue]Browse by Playlist[/]").RuleStyle("blue"));
             AnsiConsole.WriteLine();
 
-            // Step 1: Get all playlists
+            // Step 1: Get all playlists and show comprehensive table
             var playlists = await _analyticsService.GetAllPlaylistsSortedByNameAsync();
 
-            // Step 2: User selects playlist
-            var selectedPlaylist = MenuBuilder.SelectPlaylist(playlists);
-            if (selectedPlaylist == null) return; // Back pressed
+            if (!playlists.Any())
+            {
+                AnsiConsole.MarkupLine("[yellow]No playlists found in database.[/]");
+                AnsiConsole.MarkupLine("\n[dim]Press any key to go back...[/]");
+                Console.ReadKey(intercept: true);
+                return;
+            }
+
+            // Show full table for visualization
+            SpectreReportFormatter.RenderPlaylistsTable(playlists);
+            AnsiConsole.WriteLine();
+
+            // Step 2: Search/filter to select playlist
+            var searchTerm = AnsiConsole.Prompt(
+                new TextPrompt<string>("[cyan]Enter playlist name to view tracks[/] [dim](or 'back' to return)[/]:")
+                    .PromptStyle("green")
+                    .AllowEmpty()
+            );
+
+            if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Equals("back", StringComparison.OrdinalIgnoreCase))
+            {
+                return; // Back to main menu
+            }
+
+            // Filter playlists by search term
+            var matches = playlists
+                .Where(p => p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(p => p.Name)
+                .ToList();
+
+            if (!matches.Any())
+            {
+                AnsiConsole.MarkupLine($"\n[red]No playlists found matching '{searchTerm.EscapeMarkup()}'[/]");
+                AnsiConsole.MarkupLine("[dim]Press any key to try again...[/]");
+                Console.ReadKey(intercept: true);
+                continue;
+            }
+
+            // If multiple matches, let user select
+            Playlist selectedPlaylist;
+            if (matches.Count == 1)
+            {
+                selectedPlaylist = matches[0];
+                AnsiConsole.MarkupLine($"\n[green]Selected:[/] {selectedPlaylist.Name.EscapeMarkup()}");
+            }
+            else
+            {
+                AnsiConsole.WriteLine();
+                selectedPlaylist = MenuBuilder.SelectPlaylist(matches)!;
+                if (selectedPlaylist == null) continue; // Back to search
+            }
 
             // Step 3: Get tracks in this playlist (preserve order)
             AnsiConsole.Clear();

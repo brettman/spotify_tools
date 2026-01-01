@@ -337,4 +337,99 @@ public static class SpectreReportFormatter
 
         return $"[{color}]{bar}[/] [dim]{popularity}%[/]";
     }
+
+    /// <summary>
+    /// Renders a comprehensive table of all artists sorted alphabetically
+    /// </summary>
+    public static void RenderArtistsTable(List<Artist> artists)
+    {
+        if (!artists.Any())
+        {
+            AnsiConsole.MarkupLine("[yellow]No artists found in database.[/]");
+            return;
+        }
+
+        // Sort alphabetically by default for better browsing
+        var sorted = artists.OrderBy(a => a.Name).ToList();
+
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Yellow)
+            .Title($"[yellow bold]👥 All Artists ({sorted.Count} total)[/]")
+            .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
+            .AddColumn(new TableColumn("[green]Artist Name[/]").LeftAligned())
+            .AddColumn(new TableColumn("[blue]Followers[/]").RightAligned())
+            .AddColumn(new TableColumn("[magenta]Popularity[/]").RightAligned())
+            .AddColumn(new TableColumn("[yellow]Genres[/]").LeftAligned());
+
+        int index = 1;
+        foreach (var artist in sorted)
+        {
+            var genresDisplay = artist.Genres.Any()
+                ? string.Join(", ", artist.Genres.Take(5)).EscapeMarkup()
+                : "[dim]none[/]";
+
+            if (artist.Genres.Length > 5)
+            {
+                genresDisplay += $" [dim](+{artist.Genres.Length - 5} more)[/]";
+            }
+
+            table.AddRow(
+                index.ToString(),
+                artist.Name.EscapeMarkup(),
+                $"{artist.Followers:N0}",
+                artist.Popularity.ToString(),
+                genresDisplay
+            );
+            index++;
+        }
+
+        AnsiConsole.Write(table);
+    }
+
+    /// <summary>
+    /// Renders a comprehensive table of all playlists sorted alphabetically
+    /// </summary>
+    public static void RenderPlaylistsTable(List<Playlist> playlists)
+    {
+        if (!playlists.Any())
+        {
+            AnsiConsole.MarkupLine("[yellow]No playlists found in database.[/]");
+            return;
+        }
+
+        // Sort alphabetically by default
+        var sorted = playlists.OrderBy(p => p.Name).ToList();
+
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Blue)
+            .Title($"[blue bold]📂 All Playlists ({sorted.Count} total)[/]")
+            .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
+            .AddColumn(new TableColumn("[green]Playlist Name[/]").LeftAligned())
+            .AddColumn(new TableColumn("[yellow]Tracks[/]").RightAligned())
+            .AddColumn(new TableColumn("[magenta]Owner[/]").LeftAligned())
+            .AddColumn(new TableColumn("[blue]Description[/]").LeftAligned());
+
+        int index = 1;
+        foreach (var playlist in sorted)
+        {
+            var description = !string.IsNullOrEmpty(playlist.Description)
+                ? (playlist.Description.Length > 50
+                    ? playlist.Description.Substring(0, 47).EscapeMarkup() + "..."
+                    : playlist.Description.EscapeMarkup())
+                : "[dim]none[/]";
+
+            table.AddRow(
+                index.ToString(),
+                playlist.Name.EscapeMarkup(),
+                playlist.PlaylistTracks.Count.ToString(),
+                playlist.OwnerId.EscapeMarkup(),
+                description
+            );
+            index++;
+        }
+
+        AnsiConsole.Write(table);
+    }
 }
