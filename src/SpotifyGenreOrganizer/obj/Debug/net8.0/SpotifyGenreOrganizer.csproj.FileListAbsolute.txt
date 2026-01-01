@@ -107,3 +107,5 @@
 /Users/bretthardman/_dev/spotify_tools/src/SpotifyGenreOrganizer/bin/Debug/net8.0/SpotifyTools.Analytics.dll
 /Users/bretthardman/_dev/spotify_tools/src/SpotifyGenreOrganizer/bin/Debug/net8.0/SpotifyTools.Analytics.pdb
 /Users/bretthardman/_dev/spotify_tools/src/SpotifyGenreOrganizer/obj/Debug/net8.0/SpotifyGenreOrganizer.sourcelink.json
+/Users/bretthardman/_dev/spotify_tools/src/SpotifyGenreOrganizer/bin/Debug/net8.0/appsettings.json
+/Users/bretthardman/_dev/spotify_tools/src/SpotifyGenreOrganizer/bin/Debug/net8.0/Spectre.Console.dll

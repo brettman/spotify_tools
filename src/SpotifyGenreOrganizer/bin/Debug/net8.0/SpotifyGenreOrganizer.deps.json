@@ -15,6 +15,7 @@
           "Microsoft.Extensions.Hosting": "9.0.10",
           "Microsoft.Extensions.Hosting.Abstractions": "9.0.10",
           "Newtonsoft.Json": "13.0.4",
+          "Spectre.Console": "0.54.0",
           "SpotifyAPI.Web": "7.2.1",
           "SpotifyAPI.Web.Auth": "7.2.1",
           "SpotifyClientService": "1.0.0",
@@ -495,6 +496,14 @@
           }
         }
       },
+      "Spectre.Console/0.54.0": {
+        "runtime": {
+          "lib/net8.0/Spectre.Console.dll": {
+            "assemblyVersion": "0.0.0.0",
+            "fileVersion": "0.54.0.0"
+          }
+        }
+      },
       "SpotifyAPI.Web/7.2.1": {
         "dependencies": {
           "Newtonsoft.Json": "13.0.4"
@@ -611,6 +620,8 @@
       },
       "SpotifyTools.Analytics/1.0.0": {
         "dependencies": {
+          "SpotifyAPI.Web": "7.2.1",
+          "SpotifyClientService": "1.0.0",
           "SpotifyTools.Data": "1.0.0",
           "SpotifyTools.Domain": "1.0.0"
         },
@@ -925,6 +936,13 @@
       "sha512": "sha512-leShR/O/nSIS3Jpj8yUBmkzaXzBbtlV326+MYkX2BwAj2qSNrUv/H6m8G9Hnv2zUkQYccTpmV5jIVq5vdciEUA==",
       "path": "npgsql.entityframeworkcore.postgresql/8.0.11",
       "hashPath": "npgsql.entityframeworkcore.postgresql.8.0.11.nupkg.sha512"
+    },
+    "Spectre.Console/0.54.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-StDXCFayfy0yB1xzUHT2tgEpV1/HFTiS4JgsAQS49EYTfMixSwwucaQs/bIOCwXjWwIQTMuxjUIxcB5XsJkFJA==",
+      "path": "spectre.console/0.54.0",
+      "hashPath": "spectre.console.0.54.0.nupkg.sha512"
     },
     "SpotifyAPI.Web/7.2.1": {
       "type": "package",

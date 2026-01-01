@@ -750,6 +750,19 @@
           }
         }
       },
+      "Spectre.Console/0.54.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/Spectre.Console.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/Spectre.Console.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "SpotifyAPI.Web/7.2.1": {
         "type": "package",
         "dependencies": {
@@ -927,6 +940,8 @@
         "type": "project",
         "framework": ".NETCoreApp,Version=v8.0",
         "dependencies": {
+          "SpotifyAPI.Web": "7.2.1",
+          "SpotifyClientService": "1.0.0",
           "SpotifyTools.Data": "1.0.0",
           "SpotifyTools.Domain": "1.0.0"
         },
@@ -2029,6 +2044,27 @@
         "postgresql.png"
       ]
     },
+    "Spectre.Console/0.54.0": {
+      "sha512": "StDXCFayfy0yB1xzUHT2tgEpV1/HFTiS4JgsAQS49EYTfMixSwwucaQs/bIOCwXjWwIQTMuxjUIxcB5XsJkFJA==",
+      "type": "package",
+      "path": "spectre.console/0.54.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net10.0/Spectre.Console.dll",
+        "lib/net10.0/Spectre.Console.xml",
+        "lib/net8.0/Spectre.Console.dll",
+        "lib/net8.0/Spectre.Console.xml",
+        "lib/net9.0/Spectre.Console.dll",
+        "lib/net9.0/Spectre.Console.xml",
+        "lib/netstandard2.0/Spectre.Console.dll",
+        "lib/netstandard2.0/Spectre.Console.xml",
+        "logo.png",
+        "spectre.console.0.54.0.nupkg.sha512",
+        "spectre.console.nuspec"
+      ]
+    },
     "SpotifyAPI.Web/7.2.1": {
       "sha512": "7yatLKdwPmigJ+GGPUHwZppYzWNIPOSrpA3KKK/kndJl657zm1yzaAQ7j2xy3G7lyiKsdRZtz4k6CpFN32pyng==",
       "type": "package",
@@ -2362,6 +2398,7 @@
       "Microsoft.Extensions.Hosting >= 9.0.10",
       "Microsoft.Extensions.Hosting.Abstractions >= 9.0.10",
       "Newtonsoft.Json >= 13.0.4",
+      "Spectre.Console >= 0.54.0",
       "SpotifyAPI.Web >= 7.2.1",
       "SpotifyAPI.Web.Auth >= 7.2.1",
       "SpotifyClientService >= 1.0.0",
@@ -2452,6 +2489,10 @@
           "Newtonsoft.Json": {
             "target": "Package",
             "version": "[13.0.4, )"
+          },
+          "Spectre.Console": {
+            "target": "Package",
+            "version": "[0.54.0, )"
           },
           "SpotifyAPI.Web": {
             "target": "Package",

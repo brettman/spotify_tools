@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "xEQk6VsV20Y=",
+  "dgSpecHash": "URCy6acL/dA=",
   "success": true,
   "projectFilePath": "/Users/bretthardman/_dev/spotify_tools/src/SpotifyGenreOrganizer/SpotifyGenreOrganizer.csproj",
   "expectedPackageFiles": [
@@ -41,6 +41,7 @@
     "/Users/bretthardman/.nuget/packages/newtonsoft.json/13.0.4/newtonsoft.json.13.0.4.nupkg.sha512",
     "/Users/bretthardman/.nuget/packages/npgsql/8.0.6/npgsql.8.0.6.nupkg.sha512",
     "/Users/bretthardman/.nuget/packages/npgsql.entityframeworkcore.postgresql/8.0.11/npgsql.entityframeworkcore.postgresql.8.0.11.nupkg.sha512",
+    "/Users/bretthardman/.nuget/packages/spectre.console/0.54.0/spectre.console.0.54.0.nupkg.sha512",
     "/Users/bretthardman/.nuget/packages/spotifyapi.web/7.2.1/spotifyapi.web.7.2.1.nupkg.sha512",
     "/Users/bretthardman/.nuget/packages/spotifyapi.web.auth/7.2.1/spotifyapi.web.auth.7.2.1.nupkg.sha512",
     "/Users/bretthardman/.nuget/packages/system.diagnostics.diagnosticsource/10.0.1/system.diagnostics.diagnosticsource.10.0.1.nupkg.sha512",

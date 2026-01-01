@@ -1,3 +1,5 @@
+using SpotifyTools.Domain.Entities;
+
 namespace SpotifyTools.Analytics;
 
 /// <summary>
@@ -19,4 +21,31 @@ public interface IAnalyticsService
     /// <param name="limit">Maximum number of results (default 10)</param>
     /// <returns>List of matching tracks with ID and display name</returns>
     Task<List<(string TrackId, string DisplayName)>> SearchTracksAsync(string searchTerm, int limit = 10);
+
+    /// <summary>
+    /// Gets all artists sorted by follower count (descending)
+    /// </summary>
+    /// <returns>List of all artists ordered by popularity</returns>
+    Task<List<Artist>> GetAllArtistsSortedByPopularityAsync();
+
+    /// <summary>
+    /// Gets all tracks for a specific artist
+    /// </summary>
+    /// <param name="artistId">Spotify artist ID</param>
+    /// <returns>List of tracks by the artist, ordered by popularity</returns>
+    Task<List<Track>> GetTracksByArtistIdAsync(string artistId);
+
+    /// <summary>
+    /// Gets all playlists sorted by name
+    /// </summary>
+    /// <returns>List of all playlists ordered alphabetically</returns>
+    Task<List<Playlist>> GetAllPlaylistsSortedByNameAsync();
+
+    /// <summary>
+    /// Gets all tracks in a specific playlist
+    /// </summary>
+    /// <param name="playlistId">Spotify playlist ID</param>
+    /// <param name="preserveOrder">If true, maintains playlist track order; if false, sorts by popularity</param>
+    /// <returns>List of tracks in the playlist</returns>
+    Task<List<Track>> GetTracksByPlaylistIdAsync(string playlistId, bool preserveOrder = true);
 }

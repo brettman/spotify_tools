@@ -252,4 +252,100 @@ public class AnalyticsService : IAnalyticsService
             throw;
         }
     }
+
+    public async Task<List<Artist>> GetAllArtistsSortedByPopularityAsync()
+    {
+        try
+        {
+            return (await _unitOfWork.Artists.GetAllAsync())
+                .OrderByDescending(a => a.Followers)
+                .ThenBy(a => a.Name)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving artists sorted by popularity");
+            throw;
+        }
+    }
+
+    public async Task<List<Track>> GetTracksByArtistIdAsync(string artistId)
+    {
+        try
+        {
+            // Get all track-artist relationships for this artist
+            var trackIds = (await _unitOfWork.TrackArtists.GetAllAsync())
+                .Where(ta => ta.ArtistId == artistId)
+                .Select(ta => ta.TrackId)
+                .ToHashSet();
+
+            // Get the actual tracks
+            return (await _unitOfWork.Tracks.GetAllAsync())
+                .Where(t => trackIds.Contains(t.Id))
+                .OrderByDescending(t => t.Popularity)
+                .ThenBy(t => t.Name)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tracks for artist {ArtistId}", artistId);
+            throw;
+        }
+    }
+
+    public async Task<List<Playlist>> GetAllPlaylistsSortedByNameAsync()
+    {
+        try
+        {
+            return (await _unitOfWork.Playlists.GetAllAsync())
+                .OrderBy(p => p.Name)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving playlists sorted by name");
+            throw;
+        }
+    }
+
+    public async Task<List<Track>> GetTracksByPlaylistIdAsync(string playlistId, bool preserveOrder = true)
+    {
+        try
+        {
+            // Get playlist tracks with their positions
+            var playlistTracks = (await _unitOfWork.PlaylistTracks.GetAllAsync())
+                .Where(pt => pt.PlaylistId == playlistId);
+
+            if (preserveOrder)
+            {
+                playlistTracks = playlistTracks.OrderBy(pt => pt.Position);
+            }
+
+            var trackIds = playlistTracks.Select(pt => pt.TrackId).ToList();
+
+            // Fetch tracks in order
+            var tracks = new List<Track>();
+            foreach (var trackId in trackIds)
+            {
+                var track = await _unitOfWork.Tracks.GetByIdAsync(trackId);
+                if (track != null)
+                {
+                    tracks.Add(track);
+                }
+            }
+
+            // If not preserving order, sort by popularity
+            if (!preserveOrder)
+            {
+                tracks = tracks.OrderByDescending(t => t.Popularity).ThenBy(t => t.Name).ToList();
+            }
+
+            return tracks;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tracks for playlist {PlaylistId}", playlistId);
+            throw;
+        }
+    }
 }

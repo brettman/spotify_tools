@@ -17,6 +17,7 @@ public class CliMenuService
     private readonly ISyncService _syncService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAnalyticsService _analyticsService;
+    private readonly NavigationService _navigationService;
     private readonly ILogger<CliMenuService> _logger;
 
     public CliMenuService(
@@ -24,12 +25,14 @@ public class CliMenuService
         ISyncService syncService,
         IUnitOfWork unitOfWork,
         IAnalyticsService analyticsService,
+        NavigationService navigationService,
         ILogger<CliMenuService> logger)
     {
         _spotifyClient = spotifyClient ?? throw new ArgumentNullException(nameof(spotifyClient));
         _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _analyticsService = analyticsService ?? throw new ArgumentNullException(nameof(analyticsService));
+        _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -301,75 +304,31 @@ public class CliMenuService
 
     private async Task ShowTrackDetailAsync()
     {
-        Console.WriteLine("\n╔════════════════════════════════════════╗");
-        Console.WriteLine("║        Track Detail Report             ║");
-        Console.WriteLine("╚════════════════════════════════════════╝");
-        Console.WriteLine();
-
-        // Prompt for track search
-        Console.Write("Enter track name to search: ");
-        var searchTerm = Console.ReadLine()?.Trim();
-
-        if (string.IsNullOrWhiteSpace(searchTerm))
-        {
-            Console.WriteLine("\n❌ Search term cannot be empty.");
-            return;
-        }
+        var choice = MenuBuilder.ShowNavigationMenu();
 
         try
         {
-            // Search for tracks
-            var results = await _analyticsService.SearchTracksAsync(searchTerm, 10);
-
-            if (!results.Any())
+            switch (choice)
             {
-                Console.WriteLine($"\n❌ No tracks found matching '{searchTerm}'");
-                return;
+                case "Browse by Artist":
+                    await _navigationService.NavigateByArtistAsync();
+                    break;
+                case "Browse by Playlist":
+                    await _navigationService.NavigateByPlaylistAsync();
+                    break;
+                case "Search by Name":
+                    await _navigationService.NavigateBySearchAsync();
+                    break;
+                case "Back to Main Menu":
+                    return;
             }
-
-            // Display search results
-            Console.WriteLine($"\nFound {results.Count} track(s):");
-            Console.WriteLine();
-            for (int i = 0; i < results.Count; i++)
-            {
-                Console.WriteLine($"{i + 1}. {results[i].DisplayName}");
-            }
-
-            // Prompt for selection
-            Console.WriteLine();
-            Console.Write($"Select a track (1-{results.Count}) or 0 to cancel: ");
-            var selectionInput = Console.ReadLine()?.Trim();
-
-            if (!int.TryParse(selectionInput, out var selection) || selection < 0 || selection > results.Count)
-            {
-                Console.WriteLine("\n❌ Invalid selection.");
-                return;
-            }
-
-            if (selection == 0)
-            {
-                Console.WriteLine("\nCancelled.");
-                return;
-            }
-
-            // Get and display track detail report
-            var trackId = results[selection - 1].TrackId;
-            var report = await _analyticsService.GetTrackDetailReportAsync(trackId);
-
-            if (report == null)
-            {
-                Console.WriteLine($"\n❌ Could not load details for selected track.");
-                return;
-            }
-
-            // Format and display the report
-            var formattedReport = ReportFormatter.FormatTrackDetailReport(report);
-            Console.WriteLine(formattedReport);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error displaying track detail report");
-            Console.WriteLine($"\n❌ Error: {ex.Message}");
+            _logger.LogError(ex, "Error in navigation");
+            AnsiConsole.MarkupLine($"\n[red]❌ Error: {ex.Message.EscapeMarkup()}[/]");
+            AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+            Console.ReadKey(intercept: true);
         }
     }
 

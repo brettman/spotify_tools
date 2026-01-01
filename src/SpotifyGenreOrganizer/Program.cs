@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SpotifyClientService;
 using SpotifyGenreOrganizer;
+using SpotifyGenreOrganizer.UI;
 using SpotifyTools.Data.DbContext;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Data.Repositories.Implementations;
@@ -45,6 +46,9 @@ static IHostBuilder CreateHostBuilder(string[] args) =>
 
             // Analytics service
             services.AddScoped<IAnalyticsService, AnalyticsService>();
+
+            // Navigation service
+            services.AddScoped<NavigationService>();
 
             // CLI
             services.AddScoped<CliMenuService>();

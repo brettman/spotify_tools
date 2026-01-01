@@ -156,6 +156,10 @@
               "target": "Package",
               "version": "[13.0.4, )"
             },
+            "Spectre.Console": {
+              "target": "Package",
+              "version": "[0.54.0, )"
+            },
             "SpotifyAPI.Web": {
               "target": "Package",
               "version": "[7.2.1, )"
@@ -207,6 +211,9 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
+              "/Users/bretthardman/_dev/spotify_tools/src/SpotifyClientService/SpotifyClientService.csproj": {
+                "projectPath": "/Users/bretthardman/_dev/spotify_tools/src/SpotifyClientService/SpotifyClientService.csproj"
+              },
               "/Users/bretthardman/_dev/spotify_tools/src/SpotifyTools.Data/SpotifyTools.Data.csproj": {
                 "projectPath": "/Users/bretthardman/_dev/spotify_tools/src/SpotifyTools.Data/SpotifyTools.Data.csproj"
               },
@@ -230,6 +237,12 @@
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
+          "dependencies": {
+            "SpotifyAPI.Web": {
+              "target": "Package",
+              "version": "[7.2.1, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
