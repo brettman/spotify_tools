@@ -3,6 +3,8 @@ using SpotifyClientService;
 using SpotifyTools.Sync;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Analytics;
+using Spectre.Console;
+using SpotifyGenreOrganizer.UI;
 
 namespace SpotifyGenreOrganizer;
 
@@ -33,55 +35,51 @@ public class CliMenuService
 
     public async Task RunAsync()
     {
-        Console.Clear();
+        AnsiConsole.Clear();
         ShowWelcome();
 
         while (true)
         {
-            ShowMainMenu();
-            var choice = Console.ReadLine()?.Trim();
+            var choice = MenuBuilder.ShowMainMenu();
 
             try
             {
                 switch (choice)
                 {
-                    case "1":
+                    case "Full Sync (Import all data)":
                         await FullSyncAsync();
                         break;
-                    case "2":
+                    case "Partial Sync (Select stages)":
                         await PartialSyncAsync();
                         break;
-                    case "3":
+                    case "View Last Sync Status":
                         await ViewLastSyncStatusAsync();
                         break;
-                    case "4":
+                    case "View Sync History":
                         await ViewSyncHistoryAsync();
                         break;
-                    case "5":
+                    case "Track Detail Report":
                         await ShowTrackDetailAsync();
                         break;
-                    case "6":
+                    case "Test Artist API (Debug)":
                         await TestArtistApiAsync();
                         break;
-                    case "7":
-                        Console.WriteLine("\nGoodbye!");
+                    case "Exit":
+                        AnsiConsole.MarkupLine("[green]Goodbye![/]");
                         return;
-                    default:
-                        Console.WriteLine("\n❌ Invalid choice. Please select 1-7.");
-                        break;
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error executing menu option");
-                Console.WriteLine($"\n❌ Error: {ex.Message}");
+                AnsiConsole.MarkupLine($"[red]❌ Error: {ex.Message.EscapeMarkup()}[/]");
             }
 
-            if (choice != "7")
+            if (choice != "Exit")
             {
-                Console.WriteLine("\nPress any key to continue...");
-                Console.ReadKey();
-                Console.Clear();
+                AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+                AnsiConsole.Clear();
             }
         }
     }
