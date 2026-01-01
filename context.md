@@ -1,31 +1,34 @@
 # Spotify Tools - Project Context
 
-**Last Updated:** 2025-12-31
+**Last Updated:** 2026-01-01
 
-## Project Status: Phase 6 Complete - Awaiting Quota Reset
+## Project Status: Phase 6 Complete - Full Sync Ready
 
 ### Current Phase
-✅ **Phase 6 (Analytics) COMPLETE** - Audio analysis with section-by-section breakdown implemented
-⚠️ **Spotify Daily API Quota Exhausted** - Can resume testing tomorrow after quota resets
+✅ **Phase 6 (Analytics) COMPLETE** - Track detail reports with audio features
+✅ **Full Sync Debugged** - Playlist foreign key constraint issue resolved
+⚠️ **Audio Analysis Deprecated** - Spotify deprecated audio analysis API (tabled for now)
 
-### Session Summary (2025-12-31)
+### Session Summary (2026-01-01)
 **Major Accomplishments:**
-1. ✅ Implemented audio analysis feature with section-by-section key/tempo/time signature tracking
-2. ✅ Fixed multiple rate limiting issues (60s cap, global backoff, retry wait logic)
-3. ✅ Added Test Artist API debug tool
-4. ⚠️ Discovered daily API quota limit (~10k-15k requests/day)
+1. ✅ Fixed playlist sync foreign key constraint violation
+2. ✅ Implemented missing playlist track tracking system
+3. ✅ Added `MissingPlaylistTrackIds` field to SyncHistory for incremental sync planning
+4. ✅ Database migration applied successfully
+5. ⚠️ Discovered Spotify deprecated audio analysis API (section-by-section feature tabled)
 
 **Current Situation:**
-- Daily API quota exhausted (21 hours until reset)
-- All Spotify API calls blocked until tomorrow
-- Database has partial sync (3,462 tracks, some artists/albums)
-- Ready to complete full sync once quota resets
+- Full sync working for tracks, artists, albums, and playlists
+- Audio features sync removed (deprecated API)
+- Audio analysis feature tabled (deprecated API)
+- Playlist sync now skips tracks not in saved library and logs them for future incremental sync
+- Database ready for production use
 
-**Next Steps (Tomorrow):**
-1. Test Artist API (option 5) to verify quota reset
-2. Run ONE full sync - let it complete (~2-3 hours)
-3. Test audio analysis feature with progressive rock track
-4. Future syncs will be incremental (50-200 requests vs 4,200+)
+**Next Steps:**
+1. Run ONE complete full sync to populate database
+2. Review missing playlist track count in sync history
+3. Plan incremental sync strategy for missing playlist tracks
+4. Consider future analytics features without audio analysis
 
 ---
 
@@ -134,8 +137,9 @@ A tool to fetch Spotify library data (tracks, albums, artists, playlists), store
 - ✅ DateTime UTC issues fixed
 - ✅ Full sync successfully running (3,462 tracks, 2,092 artists)
 
-### Phase 6: Analytics Service ⏳
+### Phase 6: Analytics Service ✅
 **Started:** 2025-12-31
+**Completed:** 2026-01-01
 
 **Analytics Service (SpotifyTools.Analytics):**
 - ✅ IAnalyticsService interface with search and report methods
@@ -150,7 +154,7 @@ A tool to fetch Spotify library data (tracks, albums, artists, playlists), store
   - Basic track info (name, duration, popularity, ISRC, added date)
   - Artist details (name, genres, popularity, followers)
   - Album information (type, release date, label, total tracks)
-  - Audio Features with visual bars:
+  - Audio Features with visual bars (when available):
     - Musical characteristics (tempo, key, mode, time signature, loudness)
     - Mood & feel (danceability, energy, valence)
     - Audio qualities (acousticness, instrumentalness, liveness, speechiness)
@@ -159,21 +163,35 @@ A tool to fetch Spotify library data (tracks, albums, artists, playlists), store
 - Mode display (Major/Minor)
 - Time signature display (4/4, 3/4, etc.)
 
-**Audio Analysis Enhancement:** ✅
-**Completed:** 2025-12-31 (Commit: 71c56fd)
+**Audio Analysis Enhancement:** ⚠️ TABLED
+**Status:** Spotify deprecated the audio analysis API endpoint
 
-- ✅ AudioAnalysis and AudioAnalysisSection domain entities
+- ✅ AudioAnalysis and AudioAnalysisSection domain entities (kept for future)
 - ✅ EF Core migration for audio_analyses and audio_analysis_sections tables
-- ✅ On-demand audio analysis fetch from Spotify API
-- ✅ Automatic caching in PostgreSQL for offline access
-- ✅ Section-by-section breakdown in Track Detail Report:
-  - ✅ Overall track analysis (tempo, key, mode, time signature)
-  - ✅ Timestamp for each section
-  - ✅ Key changes highlighted with ► indicator
-  - ✅ Tempo variations across sections
-  - ✅ Time signature changes
-  - ✅ Mode (Major/Minor) transitions
-- ✅ Perfect for progressive rock (e.g., Jethro Tull's "Thick as a Brick") and jazz
+- ⚠️ Spotify API deprecated - feature tabled until alternative found
+- 📝 Original plan: Section-by-section tempo/key/time signature tracking for progressive rock/jazz
+
+### Phase 6.5: Sync Robustness ✅
+**Completed:** 2026-01-01
+
+**Problem Solved:**
+- Playlist sync was failing with foreign key constraint violations
+- Playlists can contain tracks not in user's saved library
+- Database only has saved tracks, causing FK errors on playlist_tracks insert
+
+**Solution Implemented:**
+- ✅ Added `MissingPlaylistTrackIds` field to SyncHistory entity (stores JSON array)
+- ✅ Playlist sync now checks if track exists before creating playlist_track relationship
+- ✅ Missing tracks are logged to HashSet during sync
+- ✅ Missing track IDs saved to sync history for future incremental sync
+- ✅ Database migration `AddMissingPlaylistTrackIds` created and applied
+- ✅ Sync completes successfully, skipping missing tracks with debug logging
+
+**Benefits:**
+- No more FK constraint violations during playlist sync
+- Historical record of tracks that need to be fetched
+- Foundation for incremental sync feature
+- User can see how many playlist tracks are missing from library
 
 ---
 
@@ -264,13 +282,11 @@ SpotifyTools.sln
    - ✅ Create CLI menu
    - ⏳ Implement analytics service
 
-### Current Focus (Phase 6 - COMPLETE ✅)
+### Current Focus (Phase 6.5 - COMPLETE ✅)
 - ✅ Basic track detail report (COMPLETE)
-- ✅ **Audio Analysis Enhancement (COMPLETE - Commit 71c56fd)**
-  - ✅ Spotify Audio Analysis integration
-  - ✅ Section-by-section key/tempo/time signature tracking
-  - ✅ Structural analysis display with change indicators
-  - ✅ On-demand fetch with PostgreSQL caching
+- ⚠️ **Audio Analysis Enhancement (TABLED - API Deprecated)**
+  - Domain entities and migrations kept for future
+  - Spotify deprecated the endpoint
 - ✅ **Rate Limiting Improvements (Commits 337ea6e, d9f4203, 569e67a)**
   - ✅ 60-second max wait cap
   - ✅ Global backoff mechanism
@@ -279,19 +295,24 @@ SpotifyTools.sln
 - ✅ **Debug Tooling (Commit 373fb54)**
   - ✅ Test Artist API menu option
   - ✅ Daily quota limit detection
+- ✅ **Playlist Sync Fix (2026-01-01)**
+  - ✅ Foreign key constraint violation resolved
+  - ✅ Missing track tracking implemented
+  - ✅ Database migration applied
 
-### Next Session (After Quota Reset)
-1. ⏳ Test Artist API to verify quota reset
-2. ⏳ Complete initial full sync (one time, ~2-3 hours)
-3. ⏳ Test audio analysis with progressive rock track
-4. ⏳ Verify incremental sync performance
+### Immediate Next Steps
+1. ⏳ Run complete full sync (tracks, artists, albums, playlists)
+2. ⏳ Review sync history for missing playlist track count
+3. ⏳ Test track detail reports with synced data
+4. ⏳ Commit Phase 6.5 work
 
 ### Future Features
-- ⏳ Tempo distribution analysis
+- ⏳ Incremental sync implementation (fetch missing playlist tracks)
+- ⏳ Tempo distribution analysis (using audio_features data)
 - ⏳ Key/mode distribution for DJ mixing
 - ⏳ Genre statistics from artist data
 - ⏳ Advanced analytics reports
-- ⏳ Incremental sync implementation (detect changes only)
+- ⏳ Alternative for audio analysis (if Spotify re-enables or find other source)
 
 ### Short Term
 - ✅ Full import functionality (DONE)

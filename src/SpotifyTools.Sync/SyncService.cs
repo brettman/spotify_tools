@@ -17,6 +17,7 @@ public class SyncService : ISyncService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<SyncService> _logger;
     private readonly RateLimiter _rateLimiter;
+    private readonly HashSet<string> _missingPlaylistTrackIds = new();
 
     public event EventHandler<SyncProgressEventArgs>? ProgressChanged;
 
@@ -80,6 +81,16 @@ public class SyncService : ISyncService
             syncHistory.AlbumsAdded = stats.AlbumsProcessed;
             syncHistory.PlaylistsSynced = stats.PlaylistsProcessed;
             syncHistory.ErrorMessage = null;
+
+            // Store missing playlist track IDs as JSON
+            if (_missingPlaylistTrackIds.Count > 0)
+            {
+                syncHistory.MissingPlaylistTrackIds = System.Text.Json.JsonSerializer.Serialize(_missingPlaylistTrackIds);
+                _logger.LogInformation(
+                    "Found {Count} tracks in playlists that are not in saved library. " +
+                    "Run an incremental sync to fetch these tracks.",
+                    _missingPlaylistTrackIds.Count);
+            }
 
             _unitOfWork.SyncHistory.Update(syncHistory);
             await _unitOfWork.SaveChangesAsync();
@@ -584,67 +595,66 @@ public class SyncService : ISyncService
             return 0;
         }
 
-        // Process in batches of 100 (Spotify API limit)
-        const int batchSize = 100;
-        for (var i = 0; i < trackIds.Count; i += batchSize)
+        _logger.LogInformation("Processing {Total} tracks individually (batch endpoint is deprecated)", total);
+
+        // Process tracks individually - batch endpoint is deprecated
+        for (var i = 0; i < trackIds.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await _rateLimiter.WaitAsync();
 
-            var batch = trackIds.Skip(i).Take(batchSize).ToList();
+            var trackId = trackIds[i];
 
             try
             {
-                _logger.LogDebug("Processing audio features batch {Index}-{End} ({Count} tracks)",
-                    i, i + batch.Count - 1, batch.Count);
+                var af = await ExecuteWithRetryAsync(
+                    () => _spotifyClient.Client.Tracks.GetAudioFeatures(trackId),
+                    $"Audio features for track {trackId}");
 
-                var request = new TracksAudioFeaturesRequest(batch);
-                var audioFeaturesResponse = await ExecuteWithRetryAsync(
-                    () => _spotifyClient.Client.Tracks.GetSeveralAudioFeatures(request),
-                    $"Audio features batch starting at {i}");
-
-                foreach (var af in audioFeaturesResponse.AudioFeatures)
+                if (af == null)
                 {
-                    if (af == null) continue;
-
-                    var audioFeatures = new AudioFeatures
-                    {
-                        TrackId = af.Id,
-                        Acousticness = af.Acousticness,
-                        Danceability = af.Danceability,
-                        Energy = af.Energy,
-                        Instrumentalness = af.Instrumentalness,
-                        Key = af.Key,
-                        Liveness = af.Liveness,
-                        Loudness = af.Loudness,
-                        Mode = af.Mode,
-                        Speechiness = af.Speechiness,
-                        Tempo = af.Tempo,
-                        TimeSignature = af.TimeSignature,
-                        Valence = af.Valence
-                    };
-
-                    await _unitOfWork.AudioFeatures.AddAsync(audioFeatures);
-                    audioFeaturesProcessed++;
+                    _logger.LogDebug("Track {TrackId} has no audio features (likely podcast/local file)", trackId);
+                    continue;
                 }
 
-                await _unitOfWork.SaveChangesAsync();
-                OnProgressChanged("Audio Features", audioFeaturesProcessed, total,
-                    $"Processed {audioFeaturesProcessed} of {total} audio features");
-            }
-            catch (APIException apiEx)
-            {
-                _logger.LogError(apiEx, "Audio features API error at batch {Index}. Response: {Response}. Stopping to preserve API quota.",
-                    i, apiEx.Response?.Body ?? "No response body");
-                throw; // Re-throw to stop sync immediately - systemic issue
+                var audioFeatures = new AudioFeatures
+                {
+                    TrackId = af.Id,
+                    Acousticness = af.Acousticness,
+                    Danceability = af.Danceability,
+                    Energy = af.Energy,
+                    Instrumentalness = af.Instrumentalness,
+                    Key = af.Key,
+                    Liveness = af.Liveness,
+                    Loudness = af.Loudness,
+                    Mode = af.Mode,
+                    Speechiness = af.Speechiness,
+                    Tempo = af.Tempo,
+                    TimeSignature = af.TimeSignature,
+                    Valence = af.Valence
+                };
+
+                await _unitOfWork.AudioFeatures.AddAsync(audioFeatures);
+                audioFeaturesProcessed++;
+
+                // Save every 50 tracks
+                if (audioFeaturesProcessed % 50 == 0)
+                {
+                    await _unitOfWork.SaveChangesAsync();
+                    OnProgressChanged("Audio Features", audioFeaturesProcessed, total,
+                        $"Processed {audioFeaturesProcessed} of {total} audio features");
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Batch failed at index {Index}. Stopping to preserve API quota. Error: {Error}",
-                    i, ex.Message);
-                throw; // Stop immediately on any error to preserve API quota
+                _logger.LogWarning(ex, "Failed to fetch audio features for track {TrackId}. Skipping.", trackId);
+                // Continue processing other tracks instead of stopping
             }
         }
+
+        await _unitOfWork.SaveChangesAsync();
+        OnProgressChanged("Audio Features", audioFeaturesProcessed, total,
+            $"Processed {audioFeaturesProcessed} of {total} audio features");
 
         _logger.LogInformation("Synced {Count} audio features", audioFeaturesProcessed);
         return audioFeaturesProcessed;
@@ -748,6 +758,17 @@ public class SyncService : ISyncService
             {
                 if (item.Track is FullTrack fullTrack)
                 {
+                    // Check if track exists in database
+                    var trackExists = await _unitOfWork.Tracks.GetByIdAsync(fullTrack.Id);
+                    if (trackExists == null)
+                    {
+                        // Track is in playlist but not in saved library - log it
+                        _missingPlaylistTrackIds.Add(fullTrack.Id);
+                        _logger.LogDebug("Track {TrackId} ({TrackName}) in playlist {PlaylistId} not found in saved library",
+                            fullTrack.Id, fullTrack.Name, playlistId);
+                        continue;
+                    }
+
                     var playlistTrack = new PlaylistTrack
                     {
                         PlaylistId = playlistId,

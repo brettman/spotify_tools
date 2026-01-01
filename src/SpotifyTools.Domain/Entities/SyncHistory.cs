@@ -53,6 +53,11 @@ public class SyncHistory
     public int PlaylistsSynced { get; set; }
 
     /// <summary>
+    /// Track IDs found in playlists but not in saved library (JSON array)
+    /// </summary>
+    public string? MissingPlaylistTrackIds { get; set; }
+
+    /// <summary>
     /// Status of the sync operation
     /// </summary>
     public SyncStatus Status { get; set; }
