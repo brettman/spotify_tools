@@ -49,22 +49,25 @@ public class CliMenuService
                         await FullSyncAsync();
                         break;
                     case "2":
-                        await ViewLastSyncStatusAsync();
+                        await PartialSyncAsync();
                         break;
                     case "3":
-                        await ViewSyncHistoryAsync();
+                        await ViewLastSyncStatusAsync();
                         break;
                     case "4":
-                        await ShowTrackDetailAsync();
+                        await ViewSyncHistoryAsync();
                         break;
                     case "5":
-                        await TestArtistApiAsync();
+                        await ShowTrackDetailAsync();
                         break;
                     case "6":
+                        await TestArtistApiAsync();
+                        break;
+                    case "7":
                         Console.WriteLine("\nGoodbye!");
                         return;
                     default:
-                        Console.WriteLine("\n❌ Invalid choice. Please select 1-6.");
+                        Console.WriteLine("\n❌ Invalid choice. Please select 1-7.");
                         break;
                 }
             }
@@ -74,7 +77,7 @@ public class CliMenuService
                 Console.WriteLine($"\n❌ Error: {ex.Message}");
             }
 
-            if (choice != "6")
+            if (choice != "7")
             {
                 Console.WriteLine("\nPress any key to continue...");
                 Console.ReadKey();
@@ -100,13 +103,14 @@ public class CliMenuService
         Console.WriteLine("│           Main Menu                    │");
         Console.WriteLine("├────────────────────────────────────────┤");
         Console.WriteLine("│  1. Full Sync (Import all data)       │");
-        Console.WriteLine("│  2. View Last Sync Status              │");
-        Console.WriteLine("│  3. View Sync History                  │");
-        Console.WriteLine("│  4. Track Detail Report                │");
-        Console.WriteLine("│  5. Test Artist API (Debug)            │");
-        Console.WriteLine("│  6. Exit                               │");
+        Console.WriteLine("│  2. Partial Sync (Select stages)      │");
+        Console.WriteLine("│  3. View Last Sync Status              │");
+        Console.WriteLine("│  4. View Sync History                  │");
+        Console.WriteLine("│  5. Track Detail Report                │");
+        Console.WriteLine("│  6. Test Artist API (Debug)            │");
+        Console.WriteLine("│  7. Exit                               │");
         Console.WriteLine("└────────────────────────────────────────┘");
-        Console.Write("\nSelect an option (1-6): ");
+        Console.Write("\nSelect an option (1-7): ");
     }
 
     private async Task FullSyncAsync()
@@ -146,6 +150,80 @@ public class CliMenuService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Full sync failed");
+            Console.WriteLine($"\n❌ Sync failed: {ex.Message}");
+        }
+        finally
+        {
+            _syncService.ProgressChanged -= OnSyncProgress;
+        }
+    }
+
+    private async Task PartialSyncAsync()
+    {
+        Console.WriteLine("\n╔════════════════════════════════════════╗");
+        Console.WriteLine("║         Partial Sync                   ║");
+        Console.WriteLine("╚════════════════════════════════════════╝");
+        Console.WriteLine();
+        Console.WriteLine("Select which stage to sync:");
+        Console.WriteLine();
+        Console.WriteLine("  1. Tracks");
+        Console.WriteLine("  2. Artists");
+        Console.WriteLine("  3. Albums");
+        Console.WriteLine("  4. Audio Features");
+        Console.WriteLine("  5. Playlists");
+        Console.WriteLine("  6. Back to main menu");
+        Console.WriteLine();
+        Console.Write("Select an option (1-6): ");
+
+        var choice = Console.ReadLine()?.Trim();
+
+        Func<Task<int>>? syncAction = choice switch
+        {
+            "1" => () => _syncService.SyncTracksOnlyAsync(),
+            "2" => () => _syncService.SyncArtistsOnlyAsync(),
+            "3" => () => _syncService.SyncAlbumsOnlyAsync(),
+            "4" => () => _syncService.SyncAudioFeaturesOnlyAsync(),
+            "5" => () => _syncService.SyncPlaylistsOnlyAsync(),
+            "6" => null,
+            _ => null
+        };
+
+        if (syncAction == null)
+        {
+            if (choice != "6")
+                Console.WriteLine("\n❌ Invalid choice.");
+            return;
+        }
+
+        var stageName = choice switch
+        {
+            "1" => "Tracks",
+            "2" => "Artists",
+            "3" => "Albums",
+            "4" => "Audio Features",
+            "5" => "Playlists",
+            _ => "Unknown"
+        };
+
+        Console.WriteLine($"\n🔄 Starting {stageName} sync...");
+        Console.WriteLine();
+
+        // Subscribe to progress events
+        _syncService.ProgressChanged += OnSyncProgress;
+
+        var startTime = DateTime.Now;
+
+        try
+        {
+            var count = await syncAction();
+            var duration = DateTime.Now - startTime;
+
+            Console.WriteLine($"\n✓ {stageName} sync completed! Processed: {count}");
+            Console.WriteLine($"⏱  Duration: {duration:hh\\:mm\\:ss}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "{Stage} sync failed", stageName);
             Console.WriteLine($"\n❌ Sync failed: {ex.Message}");
         }
         finally

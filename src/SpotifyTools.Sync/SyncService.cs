@@ -126,6 +126,51 @@ public class SyncService : ISyncService
             ?.CompletedAt;
     }
 
+    public async Task<int> SyncTracksOnlyAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Starting tracks-only sync");
+        if (!_spotifyClient.IsAuthenticated)
+            await _spotifyClient.AuthenticateAsync();
+
+        return await SyncTracksAsync(cancellationToken);
+    }
+
+    public async Task<int> SyncArtistsOnlyAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Starting artists-only sync");
+        if (!_spotifyClient.IsAuthenticated)
+            await _spotifyClient.AuthenticateAsync();
+
+        return await SyncArtistsAsync(cancellationToken);
+    }
+
+    public async Task<int> SyncAlbumsOnlyAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Starting albums-only sync");
+        if (!_spotifyClient.IsAuthenticated)
+            await _spotifyClient.AuthenticateAsync();
+
+        return await SyncAlbumsAsync(cancellationToken);
+    }
+
+    public async Task<int> SyncAudioFeaturesOnlyAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Starting audio features-only sync");
+        if (!_spotifyClient.IsAuthenticated)
+            await _spotifyClient.AuthenticateAsync();
+
+        return await SyncAudioFeaturesAsync(cancellationToken);
+    }
+
+    public async Task<int> SyncPlaylistsOnlyAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Starting playlists-only sync");
+        if (!_spotifyClient.IsAuthenticated)
+            await _spotifyClient.AuthenticateAsync();
+
+        return await SyncPlaylistsAsync(cancellationToken);
+    }
+
     /// <summary>
     /// Executes an API call with automatic retry logic for rate limiting (429 errors)
     /// </summary>
