@@ -192,10 +192,8 @@ public class NavigationService
 
         AnsiConsole.Clear();
 
-        // Use the existing ReportFormatter for now
-        // In Phase 4, we'll replace this with SpectreReportFormatter.RenderTrackDetailReport()
-        var formattedReport = ReportFormatter.FormatTrackDetailReport(report);
-        AnsiConsole.Write(formattedReport);
+        // Render with rich Spectre components
+        SpectreReportFormatter.RenderTrackDetailReport(report);
 
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[dim]Press any key to go back...[/]");
