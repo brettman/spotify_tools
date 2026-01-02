@@ -33,7 +33,8 @@ static IHostBuilder CreateHostBuilder(string[] args) =>
             // Database
             var connectionString = configuration.GetConnectionString("SpotifyDatabase");
             services.AddDbContext<SpotifyDbContext>(options =>
-                options.UseNpgsql(connectionString));
+                options.UseNpgsql(connectionString)
+                    .UseSnakeCaseNamingConvention());
 
             // Data layer
             services.AddScoped<IUnitOfWork, UnitOfWork>();

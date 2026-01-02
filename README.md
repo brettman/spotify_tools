@@ -6,14 +6,18 @@ A C# application that syncs your Spotify library to PostgreSQL for offline acces
 
 ### Current
 - ✅ **Full Library Sync** - Import all saved tracks, artists, albums, playlists
+- ✅ **Partial Sync** - Sync individual stages (tracks, artists, albums, playlists)
 - ✅ **Audio Features** - Tempo, key, mode, danceability, energy, and more
-- ✅ **PostgreSQL Storage** - Local database for offline queries and analytics
-- ✅ **Interactive CLI** - User-friendly menu interface
+- ✅ **PostgreSQL Storage** - Local database with snake_case naming for offline queries
+- ✅ **Interactive CLI** - Beautiful terminal interface powered by Spectre.Console
+- ✅ **Track Navigation** - Browse by artist, playlist, genre, or search by name
+- ✅ **Paginated Tables** - View large datasets with 30 rows per page navigation
+- ✅ **Analytics Views** - 8 pre-built PostgreSQL views for data visualization
 - ✅ **Sync History** - Track all import operations with statistics
 - ✅ **Rate Limiting** - Respects Spotify API limits (60 requests/min)
 
 ### Coming Soon
-- ⏳ **Analytics & Reports** - Tempo distribution, key analysis, genre statistics
+- ⏳ **Advanced Reports** - Tempo distribution, key analysis for DJ mixing
 - 📅 **Incremental Sync** - Update only changed data
 - 📅 **Web Interface** - Browse and analyze your library in a browser
 
@@ -143,11 +147,15 @@ Options 2 & 3 show:
 
 ## Database Schema
 
+### Naming Convention
+All database tables and columns use **snake_case** naming (e.g., `track_id`, `duration_ms`, `first_synced_at`), following PostgreSQL conventions.
+
 ### Core Tables
 - **tracks** - Track metadata (name, duration, popularity, ISRC)
 - **artists** - Artist data (name, genres, popularity, followers)
 - **albums** - Album information (name, release date, label)
 - **audio_features** - Audio analysis (tempo, key, danceability, energy, etc.)
+- **audio_analyses** - Detailed audio analysis with sections
 - **playlists** - User playlists
 
 ### Relationship Tables
@@ -158,6 +166,21 @@ Options 2 & 3 show:
 ### Metadata Tables
 - **sync_history** - Tracks all sync operations
 - **spotify_tokens** - OAuth tokens (future use)
+
+### Analytics Views
+
+8 pre-built views for data visualization and analysis:
+
+1. **v_tracks_with_artists** - Denormalized track-artist relationships
+2. **v_tracks_with_albums** - Tracks with album details
+3. **v_track_complete_details** - Complete track info (artists, genres, albums, audio features)
+4. **v_playlist_contents** - Playlist contents with track details
+5. **v_genre_stats** - Genre statistics and audio feature averages ⭐
+6. **v_artist_performance** - Artist metrics and analytics
+7. **v_sync_summary** - Human-readable sync history
+8. **v_high_energy_tracks** - Pre-filtered workout tracks
+
+See **DOCKER.md** for view descriptions and example queries.
 
 ## Configuration
 
