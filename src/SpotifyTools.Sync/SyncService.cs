@@ -68,12 +68,9 @@ public class SyncService : ISyncService
             OnProgressChanged("Albums", 0, 0, "Fetching album details...");
             stats.AlbumsProcessed = await SyncAlbumsAsync(cancellationToken);
 
-            // Audio Features sync disabled - Spotify deprecated batch endpoint
-            // Individual fetching would take ~115 minutes for 3,463 tracks (30 req/min)
-            // Audio features still available on-demand via analytics
-            // OnProgressChanged("Audio Features", 0, 0, "Fetching audio features...");
-            // stats.AudioFeaturesProcessed = await SyncAudioFeaturesAsync(cancellationToken);
-            stats.AudioFeaturesProcessed = 0;
+            // Audio Features sync - TESTING WITH LIMITED BATCH
+            OnProgressChanged("Audio Features", 0, 0, "Fetching audio features (TEST: limited to 10 tracks)...");
+            stats.AudioFeaturesProcessed = await SyncAudioFeaturesAsync(cancellationToken);
 
             OnProgressChanged("Playlists", 0, 0, "Fetching playlists...");
             stats.PlaylistsProcessed = await SyncPlaylistsAsync(cancellationToken);
@@ -588,6 +585,7 @@ public class SyncService : ISyncService
             .Where(t => !existingTrackIds.Contains(t.Id))
             .Select(t => t.Id)
             .Where(id => !string.IsNullOrWhiteSpace(id)) // Filter out null/empty IDs
+            .Take(10) // TESTING: Limit to 10 tracks for initial test
             .ToList();
 
         var total = trackIds.Count;
@@ -598,7 +596,7 @@ public class SyncService : ISyncService
             return 0;
         }
 
-        _logger.LogInformation("Processing {Total} tracks individually (batch endpoint is deprecated)", total);
+        _logger.LogInformation("TESTING: Processing {Total} tracks to test if audio features API is working", total);
 
         // Process tracks individually - batch endpoint is deprecated
         for (var i = 0; i < trackIds.Count; i++)
@@ -610,15 +608,21 @@ public class SyncService : ISyncService
 
             try
             {
+                _logger.LogInformation("Attempting to fetch audio features for track {TrackId} ({Index}/{Total})",
+                    trackId, i + 1, total);
+
                 var af = await ExecuteWithRetryAsync(
                     () => _spotifyClient.Client.Tracks.GetAudioFeatures(trackId),
                     $"Audio features for track {trackId}");
 
                 if (af == null)
                 {
-                    _logger.LogDebug("Track {TrackId} has no audio features (likely podcast/local file)", trackId);
+                    _logger.LogWarning("Track {TrackId} returned null audio features (likely podcast/local file)", trackId);
                     continue;
                 }
+
+                _logger.LogInformation("✓ Successfully fetched audio features for track {TrackId}: Tempo={Tempo}, Energy={Energy}, Danceability={Danceability}",
+                    trackId, af.Tempo, af.Energy, af.Danceability);
 
                 var audioFeatures = new AudioFeatures
                 {
