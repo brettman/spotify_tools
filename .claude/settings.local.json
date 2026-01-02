@@ -3,7 +3,8 @@
     "allow": [
       "Bash(find:*)",
       "Bash(git reset:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(docker exec:*)"
     ],
     "deny": [],
     "ask": []

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
 using SpotifyClientService;
 using SpotifyGenreOrganizer;
 using SpotifyGenreOrganizer.UI;
@@ -20,6 +21,10 @@ await cliMenu.RunAsync();
 
 static IHostBuilder CreateHostBuilder(string[] args) =>
     Host.CreateDefaultBuilder(args)
+        .UseSerilog((context, services, configuration) => configuration
+            .ReadFrom.Configuration(context.Configuration)
+            .ReadFrom.Services(services)
+            .Enrich.FromLogContext())
         .ConfigureAppConfiguration((context, config) =>
         {
             config.SetBasePath(Directory.GetCurrentDirectory())
@@ -53,10 +58,4 @@ static IHostBuilder CreateHostBuilder(string[] args) =>
 
             // CLI
             services.AddScoped<CliMenuService>();
-        })
-        .ConfigureLogging((context, logging) =>
-        {
-            logging.ClearProviders();
-            logging.AddConsole();
-            logging.SetMinimumLevel(LogLevel.Warning); // Reduce console noise
         });
