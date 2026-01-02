@@ -390,4 +390,438 @@ public class AnalyticsService : IAnalyticsService
             throw;
         }
     }
+
+    public async Task<GenreAnalysisReport> GetGenreAnalysisReportAsync()
+    {
+        try
+        {
+            var artists = await _unitOfWork.Artists.GetAllAsync();
+            var tracks = await _unitOfWork.Tracks.GetAllAsync();
+            var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
+
+            var report = new GenreAnalysisReport
+            {
+                TotalArtists = artists.Count(),
+                TotalTracks = tracks.Count()
+            };
+
+            // Get all genres with artist counts
+            var genreArtistMap = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            var genreTrackMap = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var artist in artists)
+            {
+                foreach (var genre in artist.Genres)
+                {
+                    if (!genreArtistMap.ContainsKey(genre))
+                    {
+                        genreArtistMap[genre] = new HashSet<string>();
+                        genreTrackMap[genre] = new HashSet<string>();
+                    }
+                    genreArtistMap[genre].Add(artist.Id);
+
+                    // Add all tracks by this artist to this genre
+                    var artistTrackIds = trackArtists
+                        .Where(ta => ta.ArtistId == artist.Id)
+                        .Select(ta => ta.TrackId);
+
+                    foreach (var trackId in artistTrackIds)
+                    {
+                        genreTrackMap[genre].Add(trackId);
+                    }
+                }
+            }
+
+            report.TotalGenres = genreArtistMap.Count;
+
+            // Calculate average genres per artist
+            var artistsWithGenres = artists.Where(a => a.Genres.Length > 0).ToList();
+            report.AverageGenresPerArtist = artistsWithGenres.Any()
+                ? artistsWithGenres.Average(a => a.Genres.Length)
+                : 0;
+
+            // Build genre stats sorted by track count
+            report.GenresByTrackCount = genreTrackMap
+                .Select(kvp => new GenreAnalysisReport.GenreStats
+                {
+                    GenreName = kvp.Key,
+                    ArtistCount = genreArtistMap[kvp.Key].Count,
+                    TrackCount = kvp.Value.Count,
+                    PercentageOfLibrary = (kvp.Value.Count / (double)report.TotalTracks) * 100
+                })
+                .OrderByDescending(g => g.TrackCount)
+                .ToList();
+
+            // Genre count distribution (how many artists have 1 genre, 2 genres, etc.)
+            report.GenreCountDistribution = artists
+                .GroupBy(a => a.Genres.Length)
+                .ToDictionary(g => g.Key, g => g.Count())
+                .OrderBy(kvp => kvp.Key)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            // Find genre overlaps (genres that frequently appear together on same artists)
+            var genrePairs = new Dictionary<string, int>();
+
+            foreach (var artist in artists.Where(a => a.Genres.Length > 1))
+            {
+                var sortedGenres = artist.Genres.OrderBy(g => g).ToList();
+                for (int i = 0; i < sortedGenres.Count; i++)
+                {
+                    for (int j = i + 1; j < sortedGenres.Count; j++)
+                    {
+                        var key = $"{sortedGenres[i]}|{sortedGenres[j]}";
+                        genrePairs[key] = genrePairs.GetValueOrDefault(key) + 1;
+                    }
+                }
+            }
+
+            report.TopGenreOverlaps = genrePairs
+                .OrderByDescending(kvp => kvp.Value)
+                .Take(20)
+                .Select(kvp =>
+                {
+                    var parts = kvp.Key.Split('|');
+                    return new GenreAnalysisReport.GenreOverlap
+                    {
+                        Genre1 = parts[0],
+                        Genre2 = parts[1],
+                        OverlapCount = kvp.Value,
+                        OverlapPercentage = (kvp.Value / (double)artistsWithGenres.Count) * 100
+                    };
+                })
+                .ToList();
+
+            return report;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating genre analysis report");
+            throw;
+        }
+    }
+
+    public async Task<Dictionary<string, List<Track>>> GetTracksByGenreAsync()
+    {
+        try
+        {
+            var artists = await _unitOfWork.Artists.GetAllAsync();
+            var tracks = await _unitOfWork.Tracks.GetAllAsync();
+            var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
+
+            var genreTracksMap = new Dictionary<string, List<Track>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var artist in artists)
+            {
+                // Get all tracks by this artist
+                var artistTrackIds = trackArtists
+                    .Where(ta => ta.ArtistId == artist.Id)
+                    .Select(ta => ta.TrackId)
+                    .ToHashSet();
+
+                var artistTracks = tracks.Where(t => artistTrackIds.Contains(t.Id)).ToList();
+
+                // Add these tracks to all genres this artist belongs to
+                foreach (var genre in artist.Genres)
+                {
+                    if (!genreTracksMap.ContainsKey(genre))
+                    {
+                        genreTracksMap[genre] = new List<Track>();
+                    }
+
+                    genreTracksMap[genre].AddRange(artistTracks);
+                }
+            }
+
+            // Remove duplicates and sort by added date (most recent first)
+            foreach (var genre in genreTracksMap.Keys.ToList())
+            {
+                genreTracksMap[genre] = genreTracksMap[genre]
+                    .DistinctBy(t => t.Id)
+                    .OrderByDescending(t => t.AddedAt)
+                    .ToList();
+            }
+
+            return genreTracksMap;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tracks by genre");
+            throw;
+        }
+    }
+
+    public async Task<List<string>> GetAvailableGenreSeedsAsync()
+    {
+        try
+        {
+            if (!_spotifyClient.IsAuthenticated)
+            {
+                _logger.LogWarning("Cannot fetch genre seeds - Spotify client not authenticated");
+                return new List<string>();
+            }
+
+            // Try to fetch from Spotify API - the method name varies by library version
+            try
+            {
+                var genreSeeds = await _spotifyClient.Client.Browse.GetRecommendationGenres();
+                _logger.LogInformation("Fetched {Count} genre seeds from Spotify", genreSeeds.Genres.Count);
+                return genreSeeds.Genres;
+            }
+            catch (Exception apiEx)
+            {
+                _logger.LogWarning(apiEx, "Spotify API call failed, returning empty list");
+                return new List<string>();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch genre seeds from Spotify API");
+            return new List<string>();
+        }
+    }
+
+    public async Task<List<GenreCluster>> SuggestGenreClustersAsync(int minTracksPerCluster = 20)
+    {
+        try
+        {
+            var artists = await _unitOfWork.Artists.GetAllAsync();
+            var tracks = await _unitOfWork.Tracks.GetAllAsync();
+            var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
+
+            // Build genre-to-track mapping
+            var genreTrackMap = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            var genreArtistMap = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var artist in artists)
+            {
+                foreach (var genre in artist.Genres)
+                {
+                    if (!genreTrackMap.ContainsKey(genre))
+                    {
+                        genreTrackMap[genre] = new HashSet<string>();
+                        genreArtistMap[genre] = new HashSet<string>();
+                    }
+
+                    genreArtistMap[genre].Add(artist.Id);
+
+                    var artistTrackIds = trackArtists
+                        .Where(ta => ta.ArtistId == artist.Id)
+                        .Select(ta => ta.TrackId);
+
+                    foreach (var trackId in artistTrackIds)
+                    {
+                        genreTrackMap[genre].Add(trackId);
+                    }
+                }
+            }
+
+            // Filter out genres with too few tracks
+            var viableGenres = genreTrackMap
+                .Where(kvp => kvp.Value.Count >= minTracksPerCluster)
+                .OrderByDescending(kvp => kvp.Value.Count)
+                .ToList();
+
+            // Auto-generate clusters using common genre patterns
+            var clusters = new List<GenreCluster>();
+            var assignedGenres = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Define common genre cluster patterns
+            var clusterPatterns = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Rock & Alternative"] = new() { "rock", "alternative", "indie rock", "garage rock", "psychedelic rock", "classic rock", "hard rock", "punk", "grunge" },
+                ["Pop & Dance"] = new() { "pop", "dance pop", "electropop", "synth-pop", "indie pop", "art pop", "chamber pop" },
+                ["Electronic & EDM"] = new() { "electronic", "edm", "house", "techno", "trance", "dubstep", "drum and bass", "ambient", "idm" },
+                ["Hip Hop & Rap"] = new() { "hip hop", "rap", "trap", "boom bap", "conscious hip hop", "gangster rap", "southern hip hop" },
+                ["R&B & Soul"] = new() { "r&b", "soul", "neo soul", "funk", "disco", "motown" },
+                ["Metal & Heavy"] = new() { "metal", "heavy metal", "death metal", "black metal", "thrash metal", "doom metal", "metalcore" },
+                ["Jazz & Blues"] = new() { "jazz", "blues", "bebop", "cool jazz", "fusion", "swing", "ragtime" },
+                ["Folk & Acoustic"] = new() { "folk", "acoustic", "singer-songwriter", "americana", "bluegrass", "country" },
+                ["Classical & Orchestral"] = new() { "classical", "orchestral", "opera", "baroque", "romantic", "contemporary classical" },
+                ["Latin & World"] = new() { "latin", "salsa", "reggaeton", "bossa nova", "samba", "world", "afrobeat" }
+            };
+
+            // Try to match genres to cluster patterns
+            foreach (var pattern in clusterPatterns)
+            {
+                var matchingGenres = viableGenres
+                    .Where(kvp => pattern.Value.Any(keyword =>
+                        kvp.Key.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+                    .Where(kvp => !assignedGenres.Contains(kvp.Key))
+                    .ToList();
+
+                if (matchingGenres.Any())
+                {
+                    var allTrackIds = new HashSet<string>();
+                    var allArtistIds = new HashSet<string>();
+                    var clusterGenres = new List<string>();
+
+                    foreach (var genreKvp in matchingGenres)
+                    {
+                        clusterGenres.Add(genreKvp.Key);
+                        assignedGenres.Add(genreKvp.Key);
+
+                        foreach (var trackId in genreKvp.Value)
+                        {
+                            allTrackIds.Add(trackId);
+                        }
+
+                        foreach (var artistId in genreArtistMap[genreKvp.Key])
+                        {
+                            allArtistIds.Add(artistId);
+                        }
+                    }
+
+                    if (allTrackIds.Count >= minTracksPerCluster)
+                    {
+                        var primaryGenre = matchingGenres.OrderByDescending(g => g.Value.Count).First().Key;
+
+                        clusters.Add(new GenreCluster
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Name = pattern.Key,
+                            Description = $"Includes: {string.Join(", ", clusterGenres.Take(5))}{(clusterGenres.Count > 5 ? $" (+{clusterGenres.Count - 5} more)" : "")}",
+                            Genres = clusterGenres.OrderByDescending(g => genreTrackMap[g].Count).ToList(),
+                            PrimaryGenre = primaryGenre,
+                            TotalTracks = allTrackIds.Count,
+                            TotalArtists = allArtistIds.Count,
+                            PercentageOfLibrary = (allTrackIds.Count / (double)tracks.Count()) * 100,
+                            IsAutoGenerated = true
+                        });
+                    }
+                }
+            }
+
+            // Create individual clusters for remaining large genres
+            var remainingGenres = viableGenres
+                .Where(kvp => !assignedGenres.Contains(kvp.Key))
+                .Where(kvp => kvp.Value.Count >= minTracksPerCluster * 2) // Only if significantly large
+                .Take(10) // Limit to avoid too many small clusters
+                .ToList();
+
+            foreach (var genreKvp in remainingGenres)
+            {
+                clusters.Add(new GenreCluster
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Name = CapitalizeGenre(genreKvp.Key),
+                    Description = $"Focused on {genreKvp.Key} artists",
+                    Genres = new List<string> { genreKvp.Key },
+                    PrimaryGenre = genreKvp.Key,
+                    TotalTracks = genreKvp.Value.Count,
+                    TotalArtists = genreArtistMap[genreKvp.Key].Count,
+                    PercentageOfLibrary = (genreKvp.Value.Count / (double)tracks.Count()) * 100,
+                    IsAutoGenerated = true
+                });
+            }
+
+            // Sort by track count descending
+            return clusters.OrderByDescending(c => c.TotalTracks).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error suggesting genre clusters");
+            throw;
+        }
+    }
+
+    public async Task<ClusterPlaylistReport> GetClusterPlaylistReportAsync(GenreCluster cluster)
+    {
+        try
+        {
+            var artists = await _unitOfWork.Artists.GetAllAsync();
+            var tracks = await _unitOfWork.Tracks.GetAllAsync();
+            var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
+            var trackAlbums = await _unitOfWork.TrackAlbums.GetAllAsync();
+            var albums = await _unitOfWork.Albums.GetAllAsync();
+
+            var report = new ClusterPlaylistReport
+            {
+                Cluster = cluster
+            };
+
+            // Find all artists that match the cluster's genres
+            var matchingArtists = artists
+                .Where(a => a.Genres.Any(g => cluster.Genres.Contains(g, StringComparer.OrdinalIgnoreCase)))
+                .ToList();
+
+            // Get all tracks by these artists
+            var matchingTrackIds = new HashSet<string>();
+            foreach (var artist in matchingArtists)
+            {
+                var artistTracks = trackArtists
+                    .Where(ta => ta.ArtistId == artist.Id)
+                    .Select(ta => ta.TrackId);
+
+                foreach (var trackId in artistTracks)
+                {
+                    matchingTrackIds.Add(trackId);
+                }
+            }
+
+            var matchingTracks = tracks.Where(t => matchingTrackIds.Contains(t.Id)).ToList();
+
+            // Build track info list
+            foreach (var track in matchingTracks)
+            {
+                // Get primary artist
+                var primaryTrackArtist = trackArtists
+                    .Where(ta => ta.TrackId == track.Id)
+                    .OrderBy(ta => ta.Position)
+                    .FirstOrDefault();
+
+                var artist = primaryTrackArtist != null
+                    ? artists.FirstOrDefault(a => a.Id == primaryTrackArtist.ArtistId)
+                    : null;
+
+                // Get album
+                var trackAlbum = trackAlbums.FirstOrDefault(ta => ta.TrackId == track.Id);
+                var album = trackAlbum != null
+                    ? albums.FirstOrDefault(a => a.Id == trackAlbum.AlbumId)
+                    : null;
+
+                // Find which genres from the cluster this track matches
+                var matchedGenres = artist?.Genres
+                    .Where(g => cluster.Genres.Contains(g, StringComparer.OrdinalIgnoreCase))
+                    .ToList() ?? new List<string>();
+
+                var duration = TimeSpan.FromMilliseconds(track.DurationMs);
+                var formattedDuration = duration.TotalHours >= 1
+                    ? $"{duration.Hours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
+                    : $"{duration.Minutes}:{duration.Seconds:D2}";
+
+                report.Tracks.Add(new ClusterPlaylistReport.TrackInfo
+                {
+                    TrackId = track.Id,
+                    TrackName = track.Name,
+                    ArtistName = artist?.Name ?? "Unknown Artist",
+                    AlbumName = album?.Name,
+                    DurationMs = track.DurationMs,
+                    FormattedDuration = formattedDuration,
+                    Genres = artist?.Genres.ToList() ?? new List<string>(),
+                    Popularity = track.Popularity,
+                    AddedAt = track.AddedAt,
+                    MatchedGenres = matchedGenres
+                });
+            }
+
+            // Sort by added date (most recent first)
+            report.Tracks = report.Tracks.OrderByDescending(t => t.AddedAt).ToList();
+
+            return report;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating cluster playlist report for {ClusterName}", cluster.Name);
+            throw;
+        }
+    }
+
+    private static string CapitalizeGenre(string genre)
+    {
+        if (string.IsNullOrEmpty(genre)) return genre;
+
+        var words = genre.Split(' ');
+        return string.Join(" ", words.Select(w =>
+            w.Length > 0 ? char.ToUpper(w[0]) + w.Substring(1) : w));
+    }
 }

@@ -9,7 +9,7 @@ namespace SpotifyGenreOrganizer.UI;
 public static class MenuBuilder
 {
     /// <summary>
-    /// Shows the main menu with 7 options
+    /// Shows the main menu with genre analysis option
     /// </summary>
     public static string ShowMainMenu()
     {
@@ -21,6 +21,8 @@ public static class MenuBuilder
                 .AddChoices(new[] {
                     "Full Sync (Import all data)",
                     "Partial Sync (Select stages)",
+                    "Genre Analysis",
+                    "Explore Genre Clusters & Playlists",
                     "View Last Sync Status",
                     "View Sync History",
                     "Track Detail Report",
@@ -45,7 +47,7 @@ public static class MenuBuilder
                     "Artists",
                     "Albums",
                     "Playlists",
-                    "Audio Features (TEST: 10 tracks)",
+                    "[dim strikethrough]Audio Features (Unavailable - Spotify API restricted)[/]",
                     "Back to Main Menu"
                 })
         );

@@ -1,25 +1,31 @@
 # Spotify Tools
 
-A C# application that syncs your Spotify library to PostgreSQL for offline access and custom analytics, with a focus on audio features (tempo, key, energy, etc.) for DJ mixing and music analysis.
+A C# application that syncs your Spotify library to PostgreSQL for offline access and custom analytics. Analyze your music collection with genre statistics, artist insights, playlist analysis, and temporal trends.
 
 ## Features
 
 ### Current
 - ✅ **Full Library Sync** - Import all saved tracks, artists, albums, playlists
 - ✅ **Partial Sync** - Sync individual stages (tracks, artists, albums, playlists)
-- ✅ **Audio Features** - Tempo, key, mode, danceability, energy, and more
 - ✅ **PostgreSQL Storage** - Local database with snake_case naming for offline queries
 - ✅ **Interactive CLI** - Beautiful terminal interface powered by Spectre.Console
 - ✅ **Track Navigation** - Browse by artist, playlist, genre, or search by name
 - ✅ **Paginated Tables** - View large datasets with 30 rows per page navigation
-- ✅ **Analytics Views** - 8 pre-built PostgreSQL views for data visualization
+- ✅ **Analytics Views** - 6 functional PostgreSQL views for data visualization
 - ✅ **Sync History** - Track all import operations with statistics
-- ✅ **Rate Limiting** - Respects Spotify API limits (60 requests/min)
+- ✅ **Rate Limiting** - Respects Spotify API limits (30 requests/min)
+- ✅ **Genre Analysis** - Comprehensive genre landscape with overlaps and statistics
+- ✅ **Genre Clustering** - Auto-suggested clusters for playlist organization
+- ✅ **Interactive Cluster Refinement** - Review and remove genres that don't fit
+- ✅ **Smart Genre Handling** - Orphaned genres intelligently reassigned or tracked
+- ✅ **Artist Insights** - Top artists by follower count, track count, and popularity
+- ❌ **Audio Features** - ~~Unavailable (Spotify API restricted as of Nov 27, 2024)~~
 
 ### Coming Soon
-- ⏳ **Advanced Reports** - Tempo distribution, key analysis for DJ mixing
+- ⏳ **Advanced Reports** - Genre trends, artist discovery, playlist insights
 - 📅 **Incremental Sync** - Update only changed data
 - 📅 **Web Interface** - Browse and analyze your library in a browser
+- 📅 **Audio Features** - Exploring third-party APIs and local analysis tools
 
 ## Architecture
 
@@ -47,6 +53,7 @@ SpotifyTools/
    - Create a new app
    - Note your **Client ID** and **Client Secret**
    - Add redirect URI: `http://127.0.0.1:5009/callback`
+   - **Note:** Apps created after Nov 27, 2024 cannot access audio features API
 
 ## Quick Start
 
@@ -130,11 +137,10 @@ Option 1 performs a complete import:
 2. Fetches all saved tracks
 3. Fetches artist details with genres
 4. Fetches album details
-5. Fetches audio features (tempo, key, etc.)
-6. Fetches user playlists
+5. Fetches user playlists
 
 **Time Estimate:**
-- ~1 hour per 3,000 tracks (due to API rate limiting)
+- ~30-45 minutes per 3,000 tracks (due to API rate limiting)
 - Progress updates shown in real-time
 
 ### View Sync Status
@@ -151,12 +157,12 @@ Options 2 & 3 show:
 All database tables and columns use **snake_case** naming (e.g., `track_id`, `duration_ms`, `first_synced_at`), following PostgreSQL conventions.
 
 ### Core Tables
-- **tracks** - Track metadata (name, duration, popularity, ISRC)
+- **tracks** - Track metadata (name, duration, popularity, ISRC, added dates)
 - **artists** - Artist data (name, genres, popularity, followers)
-- **albums** - Album information (name, release date, label)
-- **audio_features** - Audio analysis (tempo, key, danceability, energy, etc.)
-- **audio_analyses** - Detailed audio analysis with sections
+- **albums** - Album information (name, release date, label, album type)
 - **playlists** - User playlists
+- **audio_features** ⚠️ - Exists but unpopulated (Spotify API restricted)
+- **audio_analyses** ⚠️ - Exists but unpopulated (Spotify API restricted)
 
 ### Relationship Tables
 - **track_artists** - Many-to-many with artist position tracking
@@ -169,18 +175,41 @@ All database tables and columns use **snake_case** naming (e.g., `track_id`, `du
 
 ### Analytics Views
 
-8 pre-built views for data visualization and analysis:
+6 fully functional views for data visualization and analysis:
 
 1. **v_tracks_with_artists** - Denormalized track-artist relationships
 2. **v_tracks_with_albums** - Tracks with album details
-3. **v_track_complete_details** - Complete track info (artists, genres, albums, audio features)
-4. **v_playlist_contents** - Playlist contents with track details
-5. **v_genre_stats** - Genre statistics and audio feature averages ⭐
-6. **v_artist_performance** - Artist metrics and analytics
-7. **v_sync_summary** - Human-readable sync history
-8. **v_high_energy_tracks** - Pre-filtered workout tracks
+3. **v_playlist_contents** - Playlist contents with track details
+4. **v_genre_stats** - Genre statistics with track counts and popularity ⭐
+5. **v_artist_performance** - Artist metrics and analytics ⭐
+6. **v_sync_summary** - Human-readable sync history
+
+**Limited functionality (audio features columns will be NULL):**
+7. **v_track_complete_details** - Complete track info (audio features unavailable)
+8. **v_high_energy_tracks** - Cannot filter by energy/danceability (no data)
 
 See **DOCKER.md** for view descriptions and example queries.
+
+## Important: Spotify API Restrictions (Jan 2026)
+
+**Audio Features API Unavailable:** On November 27, 2024, Spotify restricted access to the `/v1/audio-features` endpoint for new applications. This means:
+
+- ❌ Cannot fetch: tempo, key, mode, danceability, energy, valence, acousticness, etc.
+- ✅ Can still fetch: tracks, artists, albums, playlists, genres, popularity
+- 📊 Focus shifted to: genre analysis, artist insights, playlist trends, temporal patterns
+
+**What You Can Still Analyze:**
+- Genre distribution and popularity across your library
+- Top artists by followers, track count, and popularity
+- Album release trends over time
+- Playlist composition and track overlap
+- Library growth and listening history patterns
+- Artist discovery and genre exploration
+
+**Future Plans:**
+- Exploring third-party APIs (Cyanite, Soundcharts)
+- Local audio analysis tools (Essentia, similar solutions)
+- Alternative data enrichment sources
 
 ## Configuration
 
@@ -191,7 +220,7 @@ See **DOCKER.md** for view descriptions and example queries.
 - **Password:** Set in `.env` file
 
 ### Spotify API
-- **Rate Limit:** 60 requests/minute (configurable in code)
+- **Rate Limit:** 30 requests/minute (configurable in code)
 - **Scopes:** UserLibraryRead, PlaylistModifyPublic, PlaylistModifyPrivate
 - **OAuth:** Authorization code flow with browser
 
@@ -234,21 +263,44 @@ See **DOCKER.md** for view descriptions and example queries.
 - Project structure and domain models
 - Data layer with EF Core
 - Sync service with rate limiting
-- CLI interface
-- Full library import
+- CLI interface with Spectre.Console
+- Full library import (tracks, artists, albums, playlists)
+- Database views for analytics
 
-### Phase 6: In Progress ⏳
-- Analytics service
-- Tempo analysis and distribution
-- Key/mode distribution for DJ mixing
-- Genre statistics
+### Phase 6: Current Focus ⏳
+- **Genre Clustering & Playlist Organization:**
+  - ✅ Genre analysis with overlap detection
+  - ✅ Auto-suggested genre clusters (10 predefined patterns + individual large genres)
+  - ✅ Interactive cluster refinement (view all genres, remove genres that don't fit)
+  - ✅ Smart orphaned genre handling (create new clusters, unclustered bucket, suggestions)
+  - 🔨 Cluster persistence and saving
+  - 🔨 Track list preview within clusters
+  - 🔨 Spotify playlist generation from approved clusters
+
+- **Analytics and Reporting:**
+  - ✅ Genre analysis and distribution reports
+  - ✅ Artist insights and discovery
+  - Playlist composition analysis
+  - Temporal trends (library growth, release patterns)
+  - Cross-referencing and correlation analysis
+
+### Phase 7: Planned 📅
+- **Enhanced Analytics:**
+  - Interactive visualizations
+  - Custom report generation
+  - Export capabilities (CSV, JSON)
+
+- **Audio Features Alternatives:**
+  - Integration with third-party APIs
+  - Local audio analysis pipeline
+  - Alternative data enrichment
 
 ### Future Phases
 - Incremental sync (only fetch changes)
-- Web interface (ASP.NET Core)
-- Advanced analytics (correlations, recommendations)
-- External data integration (MusicBrainz)
-- Export and backup functionality
+- Web interface (ASP.NET Core with Blazor)
+- Advanced recommendations engine
+- External data integration (MusicBrainz, Last.fm)
+- Backup and restore functionality
 
 ## Contributing
 

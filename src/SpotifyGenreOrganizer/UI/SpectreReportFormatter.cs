@@ -448,4 +448,156 @@ public static class SpectreReportFormatter
 
         AnsiConsole.Write(table);
     }
+
+    /// <summary>
+    /// Renders a comprehensive genre analysis report
+    /// </summary>
+    public static void RenderGenreAnalysisReport(GenreAnalysisReport report)
+    {
+        // Header Panel with summary stats
+        var summaryContent = new Markup(
+            $"[bold]Total Genres:[/] {report.TotalGenres:N0}\n" +
+            $"[bold]Total Artists:[/] {report.TotalArtists:N0}\n" +
+            $"[bold]Total Tracks:[/] {report.TotalTracks:N0}\n" +
+            $"[bold]Avg Genres per Artist:[/] {report.AverageGenresPerArtist:F2}"
+        );
+
+        var summaryPanel = new Panel(summaryContent)
+            .Border(BoxBorder.Rounded)
+            .BorderColor(Color.Cyan)
+            .Header("[cyan bold]📊 Genre Landscape Summary[/]");
+
+        AnsiConsole.Write(summaryPanel);
+        AnsiConsole.WriteLine();
+
+        // Genre Count Distribution
+        AnsiConsole.Write(new Rule("[yellow]Artist Genre Distribution[/]").RuleStyle("yellow"));
+        AnsiConsole.WriteLine();
+
+        var distributionTable = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Yellow)
+            .Title("[yellow bold]How many genres do artists have?[/]")
+            .AddColumn(new TableColumn("[cyan]# of Genres[/]").RightAligned())
+            .AddColumn(new TableColumn("[green]Artist Count[/]").RightAligned())
+            .AddColumn(new TableColumn("[magenta]Percentage[/]").LeftAligned());
+
+        foreach (var kvp in report.GenreCountDistribution.OrderBy(x => x.Key))
+        {
+            var percentage = (kvp.Value / (double)report.TotalArtists) * 100;
+            var barLength = (int)(percentage / 2); // Scale down for display
+            var bar = new string('█', Math.Min(barLength, 50));
+
+            distributionTable.AddRow(
+                kvp.Key.ToString(),
+                kvp.Value.ToString(),
+                $"[green]{bar}[/] [dim]{percentage:F1}%[/]"
+            );
+        }
+
+        AnsiConsole.Write(distributionTable);
+        AnsiConsole.WriteLine();
+
+        // Top Genres by Track Count
+        AnsiConsole.Write(new Rule("[green]Top Genres by Track Count[/]").RuleStyle("green"));
+        AnsiConsole.WriteLine();
+
+        var topGenresTable = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Green)
+            .Title("[green bold]📈 Top 20 Genres in Your Library[/]")
+            .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
+            .AddColumn(new TableColumn("[yellow]Genre[/]").LeftAligned())
+            .AddColumn(new TableColumn("[green]Tracks[/]").RightAligned())
+            .AddColumn(new TableColumn("[blue]Artists[/]").RightAligned())
+            .AddColumn(new TableColumn("[magenta]% of Library[/]").LeftAligned());
+
+        var topGenres = report.GenresByTrackCount.Take(20).ToList();
+        for (int i = 0; i < topGenres.Count; i++)
+        {
+            var genre = topGenres[i];
+            var barLength = (int)(genre.PercentageOfLibrary / 2);
+            var bar = new string('█', Math.Min(barLength, 50));
+
+            topGenresTable.AddRow(
+                (i + 1).ToString(),
+                genre.GenreName.EscapeMarkup(),
+                genre.TrackCount.ToString(),
+                genre.ArtistCount.ToString(),
+                $"[green]{bar}[/] [dim]{genre.PercentageOfLibrary:F1}%[/]"
+            );
+        }
+
+        AnsiConsole.Write(topGenresTable);
+        AnsiConsole.WriteLine();
+
+        // Genre Overlaps
+        if (report.TopGenreOverlaps.Any())
+        {
+            AnsiConsole.Write(new Rule("[magenta]Genre Overlaps[/]").RuleStyle("magenta"));
+            AnsiConsole.WriteLine();
+
+            var overlapTable = new Table()
+                .Border(TableBorder.Rounded)
+                .BorderColor(Color.Magenta)
+                .Title("[magenta bold]🔀 Genres That Frequently Appear Together[/]")
+                .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
+                .AddColumn(new TableColumn("[yellow]Genre 1[/]").LeftAligned())
+                .AddColumn(new TableColumn("[blue]Genre 2[/]").LeftAligned())
+                .AddColumn(new TableColumn("[green]Artists[/]").RightAligned())
+                .AddColumn(new TableColumn("[magenta]% of Artists[/]").LeftAligned());
+
+            var topOverlaps = report.TopGenreOverlaps.Take(15).ToList();
+            for (int i = 0; i < topOverlaps.Count; i++)
+            {
+                var overlap = topOverlaps[i];
+                var barLength = (int)(overlap.OverlapPercentage / 2);
+                var bar = new string('█', Math.Min(barLength, 50));
+
+                overlapTable.AddRow(
+                    (i + 1).ToString(),
+                    overlap.Genre1.EscapeMarkup(),
+                    overlap.Genre2.EscapeMarkup(),
+                    overlap.OverlapCount.ToString(),
+                    $"[magenta]{bar}[/] [dim]{overlap.OverlapPercentage:F1}%[/]"
+                );
+            }
+
+            AnsiConsole.Write(overlapTable);
+            AnsiConsole.WriteLine();
+        }
+
+        // Insights Panel
+        var insights = new List<string>();
+
+        if (report.GenresByTrackCount.Any())
+        {
+            var topGenre = report.GenresByTrackCount.First();
+            insights.Add($"• Your most common genre is [yellow]{topGenre.GenreName.EscapeMarkup()}[/] with {topGenre.TrackCount} tracks ({topGenre.PercentageOfLibrary:F1}%)");
+        }
+
+        var singleGenreArtists = report.GenreCountDistribution.GetValueOrDefault(1, 0);
+        var multiGenreArtists = report.TotalArtists - singleGenreArtists;
+        if (multiGenreArtists > 0)
+        {
+            var multiGenrePercent = (multiGenreArtists / (double)report.TotalArtists) * 100;
+            insights.Add($"• {multiGenrePercent:F1}% of your artists have multiple genres (genre overlap is significant!)");
+        }
+
+        if (report.GenresByTrackCount.Count >= 50)
+        {
+            insights.Add($"• You have a very diverse library with {report.TotalGenres} unique genres!");
+        }
+
+        if (insights.Any())
+        {
+            var insightsContent = new Markup(string.Join("\n", insights));
+            var insightsPanel = new Panel(insightsContent)
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Blue)
+                .Header("[blue bold]💡 Insights[/]");
+
+            AnsiConsole.Write(insightsPanel);
+        }
+    }
 }

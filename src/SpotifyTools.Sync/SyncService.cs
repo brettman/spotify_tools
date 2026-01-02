@@ -652,6 +652,19 @@ public class SyncService : ISyncService
                         $"Processed {audioFeaturesProcessed} of {total} audio features");
                 }
             }
+            catch (SpotifyAPI.Web.APIException apiEx)
+            {
+                // Extract detailed error information from Spotify API exception
+                var statusCode = apiEx.Response?.StatusCode ?? HttpStatusCode.InternalServerError;
+                var responseBody = apiEx.Response?.Body != null ? System.Text.Json.JsonSerializer.Serialize(apiEx.Response.Body) : "No response body";
+
+                _logger.LogError(
+                    "Failed to fetch audio features for track {TrackId}. " +
+                    "HTTP Status: {StatusCode}, Response: {ResponseBody}, Message: {Message}. Skipping.",
+                    trackId, statusCode, responseBody, apiEx.Message);
+
+                // Continue processing other tracks instead of stopping
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to fetch audio features for track {TrackId}. Skipping.", trackId);
@@ -660,10 +673,26 @@ public class SyncService : ISyncService
         }
 
         await _unitOfWork.SaveChangesAsync();
-        OnProgressChanged("Audio Features", audioFeaturesProcessed, total,
-            $"Processed {audioFeaturesProcessed} of {total} audio features");
 
-        _logger.LogInformation("Synced {Count} audio features", audioFeaturesProcessed);
+        var failedCount = total - audioFeaturesProcessed;
+        var message = failedCount > 0
+            ? $"Completed: {audioFeaturesProcessed} succeeded, {failedCount} failed. Check logs for details."
+            : $"Processed {audioFeaturesProcessed} of {total} audio features successfully";
+
+        OnProgressChanged("Audio Features", audioFeaturesProcessed, total, message);
+
+        if (failedCount > 0)
+        {
+            _logger.LogWarning(
+                "Audio features sync completed with errors: {Succeeded} succeeded, {Failed} failed out of {Total} total. " +
+                "Review error logs above for details on each failure.",
+                audioFeaturesProcessed, failedCount, total);
+        }
+        else
+        {
+            _logger.LogInformation("Synced {Count} audio features successfully", audioFeaturesProcessed);
+        }
+
         return audioFeaturesProcessed;
     }
 

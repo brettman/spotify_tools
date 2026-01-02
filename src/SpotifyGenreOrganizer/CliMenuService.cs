@@ -55,6 +55,12 @@ public class CliMenuService
                     case "Partial Sync (Select stages)":
                         await PartialSyncAsync();
                         break;
+                    case "Genre Analysis":
+                        await ShowGenreAnalysisAsync();
+                        break;
+                    case "Explore Genre Clusters & Playlists":
+                        await ExploreGenreClustersAsync();
+                        break;
                     case "View Last Sync Status":
                         await ViewLastSyncStatusAsync();
                         break;
@@ -167,6 +173,15 @@ public class CliMenuService
             return;
         }
 
+        // Check if Audio Features (unavailable) was selected
+        if (choice.Contains("Audio Features"))
+        {
+            AnsiConsole.MarkupLine("\n[yellow]⚠️  Audio Features Unavailable[/]");
+            AnsiConsole.MarkupLine("[dim]Spotify restricted the audio features API for new apps (Nov 27, 2024).[/]");
+            AnsiConsole.MarkupLine("[dim]Exploring alternatives: third-party APIs and local audio analysis tools.[/]");
+            return;
+        }
+
         // Map choice to sync action and stage name
         var (syncAction, stageName) = choice switch
         {
@@ -174,7 +189,6 @@ public class CliMenuService
             "Artists" => ((Func<Task<int>>)(() => _syncService.SyncArtistsOnlyAsync()), "Artists"),
             "Albums" => ((Func<Task<int>>)(() => _syncService.SyncAlbumsOnlyAsync()), "Albums"),
             "Playlists" => ((Func<Task<int>>)(() => _syncService.SyncPlaylistsOnlyAsync()), "Playlists"),
-            var s when s.StartsWith("Audio Features") => ((Func<Task<int>>)(() => _syncService.SyncAudioFeaturesOnlyAsync()), "Audio Features"),
             _ => ((Func<Task<int>>?)null, "Unknown")!
         };
 
@@ -206,6 +220,7 @@ public class CliMenuService
         {
             _logger.LogError(ex, "{Stage} sync failed", stageName);
             AnsiConsole.MarkupLine($"\n[red]❌ Sync failed: {ex.Message.EscapeMarkup()}[/]");
+            AnsiConsole.MarkupLine($"[dim]Check logs for details: src/SpotifyGenreOrganizer/logs/[/]");
         }
     }
 
@@ -291,6 +306,391 @@ public class CliMenuService
             .ToList();
 
         SpectreReportFormatter.RenderSyncHistoryTable(history);
+    }
+
+    private async Task ShowGenreAnalysisAsync()
+    {
+        AnsiConsole.Write(new Rule("[green bold]Genre Analysis[/]").RuleStyle("green"));
+        AnsiConsole.WriteLine();
+
+        try
+        {
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .StartAsync("🔍 Analyzing your genre landscape...", async ctx =>
+                {
+                    var report = await _analyticsService.GetGenreAnalysisReportAsync();
+                    ctx.Status("✓ Analysis complete");
+                    await Task.Delay(300); // Brief pause
+
+                    AnsiConsole.Clear();
+                    AnsiConsole.Write(new Rule("[green bold]Genre Analysis Report[/]").RuleStyle("green"));
+                    AnsiConsole.WriteLine();
+
+                    SpectreReportFormatter.RenderGenreAnalysisReport(report);
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating genre analysis");
+            AnsiConsole.MarkupLine($"\n[red]❌ Error: {ex.Message.EscapeMarkup()}[/]");
+        }
+    }
+
+    private async Task ExploreGenreClustersAsync()
+    {
+        AnsiConsole.Write(new Rule("[cyan bold]Genre Clusters & Playlists[/]").RuleStyle("cyan"));
+        AnsiConsole.WriteLine();
+
+        try
+        {
+            List<GenreCluster> clusters = new();
+
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .StartAsync("🔍 Generating genre clusters...", async ctx =>
+                {
+                    // Fetch available genre seeds first
+                    ctx.Status("📡 Fetching genre seeds from Spotify...");
+                    var genreSeeds = await _analyticsService.GetAvailableGenreSeedsAsync();
+
+                    if (genreSeeds.Any())
+                    {
+                        AnsiConsole.MarkupLine($"[dim]✓ Found {genreSeeds.Count} official genre seeds from Spotify[/]");
+                    }
+
+                    ctx.Status("🎵 Analyzing your library and creating clusters...");
+                    clusters = await _analyticsService.SuggestGenreClustersAsync(minTracksPerCluster: 20);
+                    ctx.Status("✓ Clusters generated");
+                    await Task.Delay(300);
+                });
+
+            if (!clusters.Any())
+            {
+                AnsiConsole.MarkupLine("[yellow]⚠️  No genre clusters found.[/]");
+                AnsiConsole.MarkupLine("[dim]This might mean your library is too small or has very few genre tags.[/]");
+                return;
+            }
+
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule($"[cyan bold]📁 Found {clusters.Count} Genre Clusters[/]").RuleStyle("cyan"));
+            AnsiConsole.WriteLine();
+
+            // Display cluster summary table
+            var clusterTable = new Table()
+                .Border(TableBorder.Rounded)
+                .BorderColor(Color.Cyan)
+                .Title("[cyan bold]Suggested Genre Clusters[/]")
+                .AddColumn(new TableColumn("[yellow]#[/]").RightAligned())
+                .AddColumn(new TableColumn("[green]Cluster Name[/]").LeftAligned())
+                .AddColumn(new TableColumn("[blue]Tracks[/]").RightAligned())
+                .AddColumn(new TableColumn("[magenta]Artists[/]").RightAligned())
+                .AddColumn(new TableColumn("[cyan]% of Library[/]").LeftAligned())
+                .AddColumn(new TableColumn("[yellow]Genres Included[/]").LeftAligned());
+
+            for (int i = 0; i < clusters.Count; i++)
+            {
+                var cluster = clusters[i];
+                var barLength = (int)(cluster.PercentageOfLibrary / 2);
+                var bar = new string('█', Math.Min(barLength, 50));
+
+                var genresPreview = cluster.Genres.Count > 3
+                    ? string.Join(", ", cluster.Genres.Take(3)) + $" (+{cluster.Genres.Count - 3} more)"
+                    : string.Join(", ", cluster.Genres);
+
+                clusterTable.AddRow(
+                    (i + 1).ToString(),
+                    cluster.Name.EscapeMarkup(),
+                    cluster.TotalTracks.ToString("N0"),
+                    cluster.TotalArtists.ToString("N0"),
+                    $"[cyan]{bar}[/] [dim]{cluster.PercentageOfLibrary:F1}%[/]",
+                    genresPreview.EscapeMarkup()
+                );
+            }
+
+            AnsiConsole.Write(clusterTable);
+            AnsiConsole.WriteLine();
+
+            // Let user select a cluster to review
+            while (true)
+            {
+                AnsiConsole.WriteLine();
+                var clusterChoices = clusters
+                    .Select((c, i) => $"{i + 1}. {c.Name} ({c.TotalTracks} tracks)")
+                    .Concat(new[] { "[dim]← Back to Main Menu[/]" })
+                    .ToList();
+
+                var selection = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[cyan]Select a cluster to review and refine:[/]")
+                        .PageSize(15)
+                        .HighlightStyle(new Style(Color.Cyan, decoration: Decoration.Bold))
+                        .AddChoices(clusterChoices)
+                );
+
+                if (selection.StartsWith("[dim]"))
+                    break;
+
+                // Extract cluster index
+                var clusterIndex = int.Parse(selection.Split('.')[0]) - 1;
+                var selectedCluster = clusters[clusterIndex];
+
+                await ReviewAndRefineClusterAsync(selectedCluster);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exploring genre clusters");
+            AnsiConsole.MarkupLine($"\n[red]❌ Error: {ex.Message.EscapeMarkup()}[/]");
+        }
+    }
+
+    private async Task ReviewAndRefineClusterAsync(GenreCluster cluster)
+    {
+        AnsiConsole.Clear();
+        AnsiConsole.Write(new Rule($"[cyan bold]📝 Reviewing: {cluster.Name.EscapeMarkup()}[/]").RuleStyle("cyan"));
+        AnsiConsole.WriteLine();
+
+        // Get genre details with track counts
+        var genreDetails = new Dictionary<string, int>();
+        var artists = await _unitOfWork.Artists.GetAllAsync();
+        var tracks = await _unitOfWork.Tracks.GetAllAsync();
+        var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
+
+        foreach (var genre in cluster.Genres)
+        {
+            var genreArtists = artists.Where(a => a.Genres.Contains(genre, StringComparer.OrdinalIgnoreCase)).ToList();
+            var genreTrackIds = new HashSet<string>();
+
+            foreach (var artist in genreArtists)
+            {
+                var artistTrackIds = trackArtists
+                    .Where(ta => ta.ArtistId == artist.Id)
+                    .Select(ta => ta.TrackId);
+                foreach (var trackId in artistTrackIds)
+                    genreTrackIds.Add(trackId);
+            }
+
+            genreDetails[genre] = genreTrackIds.Count;
+        }
+
+        // Display genre breakdown
+        var genreTable = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Yellow)
+            .Title($"[yellow bold]Genres in '{cluster.Name.EscapeMarkup()}'[/]")
+            .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
+            .AddColumn(new TableColumn("[green]Genre[/]").LeftAligned())
+            .AddColumn(new TableColumn("[blue]Tracks[/]").RightAligned())
+            .AddColumn(new TableColumn("[magenta]% of Cluster[/]").LeftAligned());
+
+        var sortedGenres = genreDetails.OrderByDescending(kvp => kvp.Value).ToList();
+        for (int i = 0; i < sortedGenres.Count; i++)
+        {
+            var genre = sortedGenres[i];
+            var percentage = (genre.Value / (double)cluster.TotalTracks) * 100;
+            var barLength = (int)(percentage / 2);
+            var bar = new string('█', Math.Min(barLength, 50));
+
+            genreTable.AddRow(
+                (i + 1).ToString(),
+                genre.Key.EscapeMarkup(),
+                genre.Value.ToString("N0"),
+                $"[magenta]{bar}[/] [dim]{percentage:F1}%[/]"
+            );
+        }
+
+        AnsiConsole.Write(genreTable);
+        AnsiConsole.WriteLine();
+
+        // Interactive refinement
+        AnsiConsole.MarkupLine("[cyan]💡 Review each genre and decide if it belongs in this cluster[/]");
+        AnsiConsole.WriteLine();
+
+        var includedGenres = new HashSet<string>(cluster.Genres, StringComparer.OrdinalIgnoreCase);
+
+        var refineChoice = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("[yellow]What would you like to do?[/]")
+                .AddChoices(new[]
+                {
+                    "Remove genres from this cluster",
+                    "View track preview (coming soon)",
+                    "Accept cluster as-is",
+                    "← Back to cluster list"
+                })
+        );
+
+        switch (refineChoice)
+        {
+            case "Remove genres from this cluster":
+                await RemoveGenresFromClusterAsync(cluster, genreDetails);
+                break;
+            case "Accept cluster as-is":
+                AnsiConsole.MarkupLine($"[green]✓ Cluster '{cluster.Name.EscapeMarkup()}' accepted[/]");
+                AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+                break;
+        }
+    }
+
+    private async Task RemoveGenresFromClusterAsync(GenreCluster cluster, Dictionary<string, int> genreDetails)
+    {
+        AnsiConsole.Clear();
+        AnsiConsole.Write(new Rule($"[yellow bold]🗑️  Remove Genres from '{cluster.Name.EscapeMarkup()}'[/]").RuleStyle("yellow"));
+        AnsiConsole.WriteLine();
+
+        var genresToRemove = AnsiConsole.Prompt(
+            new MultiSelectionPrompt<string>()
+                .Title("[yellow]Select genres to REMOVE (these won't fit the cluster):[/]")
+                .PageSize(20)
+                .MoreChoicesText("[grey](Move up/down to see more genres)[/]")
+                .InstructionsText("[grey](Press [blue]<space>[/] to toggle, [green]<enter>[/] to confirm)[/]")
+                .AddChoices(genreDetails.OrderByDescending(kvp => kvp.Value).Select(kvp =>
+                    $"{kvp.Key} ({kvp.Value} tracks)"))
+        );
+
+        if (genresToRemove.Any())
+        {
+            var removedCount = genresToRemove.Count;
+            var removedGenres = genresToRemove.Select(s => s.Split(" (")[0]).ToList();
+
+            // Calculate new stats
+            var remainingGenres = cluster.Genres.Except(removedGenres, StringComparer.OrdinalIgnoreCase).ToList();
+            var removedTracks = removedGenres.Sum(g => genreDetails.GetValueOrDefault(g, 0));
+            var remainingTracks = cluster.TotalTracks - removedTracks;
+
+            AnsiConsole.WriteLine();
+            var summaryTable = new Table()
+                .Border(TableBorder.Rounded)
+                .BorderColor(Color.Yellow)
+                .Title("[yellow bold]📊 Cluster Changes[/]")
+                .AddColumn("[cyan]Metric[/]")
+                .AddColumn("[yellow]Before[/]")
+                .AddColumn("[green]After[/]");
+
+            summaryTable.AddRow("Genres", cluster.Genres.Count.ToString(), remainingGenres.Count.ToString());
+            summaryTable.AddRow("Tracks", cluster.TotalTracks.ToString("N0"), remainingTracks.ToString("N0"));
+            summaryTable.AddRow("Change", "-", $"[red]-{removedTracks:N0} tracks[/]");
+
+            AnsiConsole.Write(summaryTable);
+            AnsiConsole.WriteLine();
+
+            // Handle orphaned genres
+            await HandleOrphanedGenresAsync(removedGenres, genreDetails, cluster);
+        }
+        else
+        {
+            AnsiConsole.MarkupLine("[yellow]No genres removed.[/]");
+            AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+            Console.ReadKey(intercept: true);
+        }
+    }
+
+    private async Task HandleOrphanedGenresAsync(List<string> removedGenres, Dictionary<string, int> genreDetails, GenreCluster originalCluster)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[magenta]🔀 Handle Removed Genres[/]").RuleStyle("magenta"));
+        AnsiConsole.WriteLine();
+
+        // Show what was removed
+        var removedTable = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Magenta)
+            .Title("[magenta bold]Removed Genres[/]")
+            .AddColumn("[yellow]Genre[/]")
+            .AddColumn("[cyan]Tracks[/]");
+
+        foreach (var genre in removedGenres.OrderByDescending(g => genreDetails.GetValueOrDefault(g, 0)))
+        {
+            removedTable.AddRow(
+                genre.EscapeMarkup(),
+                genreDetails.GetValueOrDefault(genre, 0).ToString("N0")
+            );
+        }
+
+        AnsiConsole.Write(removedTable);
+        AnsiConsole.WriteLine();
+
+        var totalRemovedTracks = removedGenres.Sum(g => genreDetails.GetValueOrDefault(g, 0));
+        AnsiConsole.MarkupLine($"[yellow]⚠️  {removedGenres.Count} genres removed → {totalRemovedTracks:N0} tracks need reassignment[/]");
+        AnsiConsole.WriteLine();
+
+        // Determine which genres are large enough for their own clusters
+        var largeGenres = removedGenres.Where(g => genreDetails.GetValueOrDefault(g, 0) >= 20).ToList();
+        var smallGenres = removedGenres.Except(largeGenres).ToList();
+
+        var choices = new List<string>();
+
+        if (largeGenres.Any())
+        {
+            var largeTrackCount = largeGenres.Sum(g => genreDetails.GetValueOrDefault(g, 0));
+            choices.Add($"Create new cluster(s) for {largeGenres.Count} large genres ({largeTrackCount:N0} tracks)");
+        }
+
+        choices.Add("Add all to 'Unclustered' bucket for later review");
+        choices.Add("See suggested alternative clusters (coming soon)");
+        choices.Add("Leave unclustered (skip for now)");
+
+        var choice = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("[cyan]What should happen to these removed genres?[/]")
+                .AddChoices(choices)
+        );
+
+        AnsiConsole.WriteLine();
+
+        if (choice.StartsWith("Create new cluster"))
+        {
+            // Create individual clusters for large genres
+            var newClusters = new List<string>();
+
+            foreach (var genre in largeGenres)
+            {
+                var trackCount = genreDetails.GetValueOrDefault(genre, 0);
+                var clusterName = CapitalizeGenre(genre);
+
+                AnsiConsole.MarkupLine($"[green]✓ Created cluster:[/] '{clusterName.EscapeMarkup()}' ({trackCount:N0} tracks)");
+                newClusters.Add(clusterName);
+            }
+
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"[green]✓ Created {newClusters.Count} new cluster(s)[/]");
+
+            if (smallGenres.Any())
+            {
+                var smallTrackCount = smallGenres.Sum(g => genreDetails.GetValueOrDefault(g, 0));
+                AnsiConsole.MarkupLine($"[dim]Note: {smallGenres.Count} smaller genres ({smallTrackCount} tracks) added to 'Unclustered'[/]");
+            }
+        }
+        else if (choice.StartsWith("Add all to"))
+        {
+            AnsiConsole.MarkupLine($"[green]✓ Added {removedGenres.Count} genres to 'Unclustered' bucket[/]");
+            AnsiConsole.MarkupLine("[dim]You can review and organize these later[/]");
+        }
+        else if (choice.StartsWith("See suggested"))
+        {
+            AnsiConsole.MarkupLine("[yellow]💡 Alternative cluster suggestions coming soon![/]");
+            AnsiConsole.MarkupLine("[dim]This will analyze genre overlap and suggest where removed genres might fit[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[dim]Skipped reassignment - {removedGenres.Count} genres remain unclustered[/]");
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[yellow]💡 Note: Cluster changes are preview only. Full save/persistence coming next![/]");
+        AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+        Console.ReadKey(intercept: true);
+    }
+
+    private static string CapitalizeGenre(string genre)
+    {
+        if (string.IsNullOrEmpty(genre)) return genre;
+
+        var words = genre.Split(' ');
+        return string.Join(" ", words.Select(w =>
+            w.Length > 0 ? char.ToUpper(w[0]) + w.Substring(1) : w));
     }
 
     private async Task ShowTrackDetailAsync()
