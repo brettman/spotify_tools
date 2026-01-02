@@ -20,6 +20,7 @@ public interface IUnitOfWork : IDisposable
     IRepository<SyncHistory> SyncHistory { get; }
     IRepository<AudioAnalysis> AudioAnalyses { get; }
     IRepository<AudioAnalysisSection> AudioAnalysisSections { get; }
+    ISavedClusterRepository SavedClusters { get; }
 
     /// <summary>
     /// Save all changes to the database

@@ -25,6 +25,7 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
     public DbSet<SyncHistory> SyncHistory => Set<SyncHistory>();
     public DbSet<AudioAnalysis> AudioAnalyses => Set<AudioAnalysis>();
     public DbSet<AudioAnalysisSection> AudioAnalysisSections => Set<AudioAnalysisSection>();
+    public DbSet<SavedCluster> SavedClusters => Set<SavedCluster>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -239,6 +240,22 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.HasIndex(e => e.StartedAt);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.SyncType);
+        });
+
+        // SavedCluster configuration
+        modelBuilder.Entity<SavedCluster>(entity =>
+        {
+            entity.ToTable("saved_clusters");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Genres).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.PrimaryGenre).HasMaxLength(100);
+
+            entity.HasIndex(e => e.Name);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.IsFinalized);
         });
     }
 }
