@@ -13,11 +13,37 @@ using SpotifyTools.Data.Repositories.Implementations;
 using SpotifyTools.Sync;
 using SpotifyTools.Analytics;
 
-var host = CreateHostBuilder(args).Build();
+// Configure Serilog early
+var configuration = new ConfigurationBuilder()
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .Build();
 
-// Run the CLI menu
-var cliMenu = host.Services.GetRequiredService<CliMenuService>();
-await cliMenu.RunAsync();
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(configuration)
+    .CreateLogger();
+
+try
+{
+    Log.Information("Starting Spotify Tools application");
+    
+    var host = CreateHostBuilder(args).Build();
+
+    // Run the CLI menu
+    var cliMenu = host.Services.GetRequiredService<CliMenuService>();
+    await cliMenu.RunAsync();
+    
+    Log.Information("Application stopped normally");
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 static IHostBuilder CreateHostBuilder(string[] args) =>
     Host.CreateDefaultBuilder(args)
