@@ -167,12 +167,6 @@ public class CliMenuService
             return;
         }
 
-        if (choice.Contains("disabled"))
-        {
-            AnsiConsole.MarkupLine("[red]❌ Audio Features sync is disabled (Spotify API deprecated).[/]");
-            return;
-        }
-
         // Map choice to sync action and stage name
         var (syncAction, stageName) = choice switch
         {
@@ -180,6 +174,7 @@ public class CliMenuService
             "Artists" => ((Func<Task<int>>)(() => _syncService.SyncArtistsOnlyAsync()), "Artists"),
             "Albums" => ((Func<Task<int>>)(() => _syncService.SyncAlbumsOnlyAsync()), "Albums"),
             "Playlists" => ((Func<Task<int>>)(() => _syncService.SyncPlaylistsOnlyAsync()), "Playlists"),
+            var s when s.StartsWith("Audio Features") => ((Func<Task<int>>)(() => _syncService.SyncAudioFeaturesOnlyAsync()), "Audio Features"),
             _ => ((Func<Task<int>>?)null, "Unknown")!
         };
 

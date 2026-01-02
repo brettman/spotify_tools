@@ -45,7 +45,7 @@ public static class MenuBuilder
                     "Artists",
                     "Albums",
                     "Playlists",
-                    "[dim]Audio Features (disabled - API deprecated)[/]",
+                    "Audio Features (TEST: 10 tracks)",
                     "Back to Main Menu"
                 })
         );
