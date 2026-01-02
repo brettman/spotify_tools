@@ -48,4 +48,17 @@ public interface IAnalyticsService
     /// <param name="preserveOrder">If true, maintains playlist track order; if false, sorts by popularity</param>
     /// <returns>List of tracks in the playlist</returns>
     Task<List<Track>> GetTracksByPlaylistIdAsync(string playlistId, bool preserveOrder = true);
+
+    /// <summary>
+    /// Gets all unique genres from all artists, sorted alphabetically
+    /// </summary>
+    /// <returns>List of unique genre names with artist count</returns>
+    Task<List<(string Genre, int ArtistCount)>> GetAllGenresAsync();
+
+    /// <summary>
+    /// Gets all artists that have a specific genre
+    /// </summary>
+    /// <param name="genre">Genre name to filter by</param>
+    /// <returns>List of artists with the specified genre, ordered by followers</returns>
+    Task<List<Artist>> GetArtistsByGenreAsync(string genre);
 }

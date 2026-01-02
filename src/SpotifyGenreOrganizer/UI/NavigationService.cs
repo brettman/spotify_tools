@@ -357,6 +357,218 @@ public class NavigationService
     }
 
     /// <summary>
+    /// Navigation flow: Browse Genres → Select Genre → View Artists → Select Artist → Tracks → Track Detail
+    /// </summary>
+    public async Task NavigateByGenreAsync()
+    {
+        while (true)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule("[magenta]Browse by Genre[/]").RuleStyle("magenta"));
+            AnsiConsole.WriteLine();
+
+            // Step 1: Get all genres
+            var genres = await _analyticsService.GetAllGenresAsync();
+
+            if (!genres.Any())
+            {
+                AnsiConsole.MarkupLine("[yellow]No genres found in database.[/]");
+                AnsiConsole.MarkupLine("\n[dim]Press any key to go back...[/]");
+                Console.ReadKey(intercept: true);
+                return;
+            }
+
+            // Step 2: Show genres table and select
+            var selectedGenre = SelectGenre(genres);
+            if (selectedGenre == null) return; // Back to main menu
+
+            // Step 3: Get artists for this genre
+            AnsiConsole.Clear();
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .StartAsync($"Loading artists for genre '{selectedGenre.EscapeMarkup()}'...", async ctx =>
+                {
+                    await Task.Delay(100);
+                });
+
+            var artists = await _analyticsService.GetArtistsByGenreAsync(selectedGenre);
+
+            if (!artists.Any())
+            {
+                AnsiConsole.MarkupLine($"[yellow]No artists found for genre '{selectedGenre.EscapeMarkup()}'[/]");
+                AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+                continue;
+            }
+
+            // Step 4: Browse artists and select
+            var selectedArtist = BrowsePaginatedArtists(artists);
+            if (selectedArtist == null) continue; // Back to genre list
+
+            // Step 5: Get tracks for this artist
+            AnsiConsole.Clear();
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .StartAsync($"Loading tracks for {selectedArtist.Name.EscapeMarkup()}...", async ctx =>
+                {
+                    await Task.Delay(100);
+                });
+
+            var tracks = await _analyticsService.GetTracksByArtistIdAsync(selectedArtist.Id);
+
+            if (!tracks.Any())
+            {
+                AnsiConsole.MarkupLine($"[yellow]No tracks found for {selectedArtist.Name.EscapeMarkup()}[/]");
+                AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+                continue;
+            }
+
+            // Step 6: User selects track
+            var selectedTrack = MenuBuilder.SelectTrack(tracks, selectedArtist.Name);
+            if (selectedTrack == null) continue; // Back to artist list
+
+            // Step 7: Show detail report
+            await ShowTrackDetailAsync(selectedTrack.Id);
+        }
+    }
+
+    /// <summary>
+    /// Select a genre from paginated list
+    /// </summary>
+    private string? SelectGenre(List<(string Genre, int ArtistCount)> genres)
+    {
+        const int pageSize = 30;
+        int currentPage = 1;
+        var totalPages = (int)Math.Ceiling(genres.Count / (double)pageSize);
+
+        while (true)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule("[magenta]Select Genre[/]").RuleStyle("magenta"));
+            AnsiConsole.WriteLine();
+
+            // Render current page
+            var startIndex = (currentPage - 1) * pageSize;
+            var pageItems = genres.Skip(startIndex).Take(pageSize).ToList();
+
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .BorderColor(Color.Magenta)
+                .Title($"[magenta bold]🎭 Genres - Page {currentPage}/{totalPages}[/] [dim]({genres.Count} total)[/]")
+                .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
+                .AddColumn(new TableColumn("[green]Genre[/]").LeftAligned())
+                .AddColumn(new TableColumn("[yellow]Artists[/]").RightAligned());
+
+            int rowNum = 1;
+            foreach (var (genre, count) in pageItems)
+            {
+                table.AddRow(
+                    rowNum.ToString(),
+                    genre.EscapeMarkup(),
+                    count.ToString()
+                );
+                rowNum++;
+            }
+
+            AnsiConsole.Write(table);
+            AnsiConsole.WriteLine();
+
+            // Show navigation prompt
+            AnsiConsole.MarkupLine("[cyan]Options:[/] [green][[N]]ext[/] [green][[P]]rev[/] [yellow][[J]]ump[/] [yellow][[1-30]][/] Select row [cyan][[S]]earch[/] [dim][[B]]ack[/]");
+            var input = AnsiConsole.Prompt(
+                new TextPrompt<string>("[cyan]Command:[/]")
+                    .PromptStyle("green")
+                    .AllowEmpty()
+            ).Trim().ToLower();
+
+            if (string.IsNullOrEmpty(input) || input == "b" || input == "back")
+            {
+                return null; // Back
+            }
+            else if (input == "n" || input == "next")
+            {
+                if (currentPage < totalPages) currentPage++;
+            }
+            else if (input == "p" || input == "prev" || input == "previous")
+            {
+                if (currentPage > 1) currentPage--;
+            }
+            else if (input == "j" || input == "jump")
+            {
+                var pageNum = AnsiConsole.Prompt(
+                    new TextPrompt<int>($"[cyan]Jump to page (1-{totalPages}):[/]")
+                        .PromptStyle("yellow")
+                        .ValidationErrorMessage($"[red]Please enter a number between 1 and {totalPages}[/]")
+                        .Validate(p => p >= 1 && p <= totalPages)
+                );
+                currentPage = pageNum;
+            }
+            else if (input == "s" || input == "search")
+            {
+                var searchTerm = AnsiConsole.Prompt(
+                    new TextPrompt<string>("[cyan]Search genre name:[/]")
+                        .PromptStyle("green")
+                        .AllowEmpty()
+                );
+
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    var matches = genres
+                        .Where(g => g.Genre.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    if (!matches.Any())
+                    {
+                        AnsiConsole.MarkupLine($"\n[red]No genres found matching '{searchTerm.EscapeMarkup()}'[/]");
+                        AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                        Console.ReadKey(intercept: true);
+                    }
+                    else if (matches.Count == 1)
+                    {
+                        return matches[0].Genre;
+                    }
+                    else
+                    {
+                        // Show filtered results
+                        AnsiConsole.WriteLine();
+                        var selection = AnsiConsole.Prompt(
+                            new SelectionPrompt<string>()
+                                .Title($"[green]Found {matches.Count} matching genre(s)[/]")
+                                .PageSize(15)
+                                .AddChoices(matches.Select(m => m.Genre).Prepend("[dim]← Back[/]"))
+                        );
+
+                        if (!selection.StartsWith("[dim]"))
+                        {
+                            return selection;
+                        }
+                    }
+                }
+            }
+            else if (int.TryParse(input, out int rowNum2) && rowNum2 >= 1 && rowNum2 <= pageSize)
+            {
+                if (rowNum2 <= pageItems.Count)
+                {
+                    return pageItems[rowNum2 - 1].Genre;
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]Row {rowNum2} not available on this page (only {pageItems.Count} rows)[/]");
+                    AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                    Console.ReadKey(intercept: true);
+                }
+            }
+            else
+            {
+                AnsiConsole.MarkupLine($"[red]Unknown command: {input.EscapeMarkup()}[/]");
+                AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+            }
+        }
+    }
+
+    /// <summary>
     /// Navigation flow: Search Text → Select Track → Track Detail
     /// </summary>
     public async Task NavigateBySearchAsync()

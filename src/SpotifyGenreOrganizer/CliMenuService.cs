@@ -312,6 +312,9 @@ public class CliMenuService
                 case "Browse by Playlist":
                     await _navigationService.NavigateByPlaylistAsync();
                     break;
+                case "Browse by Genre":
+                    await _navigationService.NavigateByGenreAsync();
+                    break;
                 case "Search by Name":
                     await _navigationService.NavigateBySearchAsync();
                     break;

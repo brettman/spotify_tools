@@ -348,4 +348,46 @@ public class AnalyticsService : IAnalyticsService
             throw;
         }
     }
+
+    public async Task<List<(string Genre, int ArtistCount)>> GetAllGenresAsync()
+    {
+        try
+        {
+            var allArtists = await _unitOfWork.Artists.GetAllAsync();
+
+            // Flatten all genres and count artists per genre
+            var genreCounts = allArtists
+                .SelectMany(a => a.Genres.Select(g => (Artist: a, Genre: g)))
+                .GroupBy(x => x.Genre, StringComparer.OrdinalIgnoreCase)
+                .Select(g => (Genre: g.Key, ArtistCount: g.DistinctBy(x => x.Artist.Id).Count()))
+                .OrderBy(g => g.Genre)
+                .ToList();
+
+            return genreCounts;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving all genres");
+            throw;
+        }
+    }
+
+    public async Task<List<Artist>> GetArtistsByGenreAsync(string genre)
+    {
+        try
+        {
+            var allArtists = await _unitOfWork.Artists.GetAllAsync();
+
+            return allArtists
+                .Where(a => a.Genres.Any(g => g.Equals(genre, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(a => a.Followers)
+                .ThenBy(a => a.Name)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving artists for genre {Genre}", genre);
+            throw;
+        }
+    }
 }

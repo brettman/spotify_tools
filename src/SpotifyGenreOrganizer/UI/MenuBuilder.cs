@@ -64,6 +64,7 @@ public static class MenuBuilder
                 .AddChoices(new[] {
                     "Browse by Artist",
                     "Browse by Playlist",
+                    "Browse by Genre",
                     "Search by Name",
                     "Back to Main Menu"
                 })
