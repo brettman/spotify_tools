@@ -17,7 +17,7 @@ public class NavigationService
     }
 
     /// <summary>
-    /// Navigation flow: View All Artists Table → Search/Select → Tracks → Track Detail
+    /// Navigation flow: Paginated Artists Table → Select → Tracks → Track Detail
     /// </summary>
     public async Task NavigateByArtistAsync()
     {
@@ -27,7 +27,7 @@ public class NavigationService
             AnsiConsole.Write(new Rule("[green]Browse by Artist[/]").RuleStyle("green"));
             AnsiConsole.WriteLine();
 
-            // Step 1: Get all artists and show comprehensive table
+            // Step 1: Get all artists
             var artists = await _analyticsService.GetAllArtistsSortedByPopularityAsync();
 
             if (!artists.Any())
@@ -38,49 +38,9 @@ public class NavigationService
                 return;
             }
 
-            // Show full table for visualization
-            SpectreReportFormatter.RenderArtistsTable(artists);
-            AnsiConsole.WriteLine();
-
-            // Step 2: Search/filter to select artist
-            var searchTerm = AnsiConsole.Prompt(
-                new TextPrompt<string>("[cyan]Enter artist name to view tracks[/] [dim](or 'back' to return)[/]:")
-                    .PromptStyle("green")
-                    .AllowEmpty()
-            );
-
-            if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Equals("back", StringComparison.OrdinalIgnoreCase))
-            {
-                return; // Back to main menu
-            }
-
-            // Filter artists by search term
-            var matches = artists
-                .Where(a => a.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(a => a.Name)
-                .ToList();
-
-            if (!matches.Any())
-            {
-                AnsiConsole.MarkupLine($"\n[red]No artists found matching '{searchTerm.EscapeMarkup()}'[/]");
-                AnsiConsole.MarkupLine("[dim]Press any key to try again...[/]");
-                Console.ReadKey(intercept: true);
-                continue;
-            }
-
-            // If multiple matches, let user select
-            Artist selectedArtist;
-            if (matches.Count == 1)
-            {
-                selectedArtist = matches[0];
-                AnsiConsole.MarkupLine($"\n[green]Selected:[/] {selectedArtist.Name.EscapeMarkup()}");
-            }
-            else
-            {
-                AnsiConsole.WriteLine();
-                selectedArtist = MenuBuilder.SelectArtist(matches)!;
-                if (selectedArtist == null) continue; // Back to search
-            }
+            // Step 2: Browse paginated table and select artist
+            var selectedArtist = BrowsePaginatedArtists(artists);
+            if (selectedArtist == null) return; // Back to main menu
 
             // Step 3: Get tracks for this artist
             AnsiConsole.Clear();
@@ -111,7 +71,123 @@ public class NavigationService
     }
 
     /// <summary>
-    /// Navigation flow: View All Playlists Table → Search/Select → Tracks → Track Detail
+    /// Browse paginated artists table with navigation controls
+    /// </summary>
+    private Artist? BrowsePaginatedArtists(List<Artist> allArtists)
+    {
+        const int pageSize = 30;
+        int currentPage = 1;
+        var sorted = allArtists.OrderBy(a => a.Name).ToList();
+
+        while (true)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule("[green]Browse Artists[/]").RuleStyle("green"));
+            AnsiConsole.WriteLine();
+
+            // Render current page
+            SpectreReportFormatter.RenderArtistsTablePage(sorted, currentPage, pageSize, out int totalPages);
+            AnsiConsole.WriteLine();
+
+            // Show navigation prompt
+            AnsiConsole.MarkupLine("[cyan]Options:[/] [green][[N]]ext[/] [green][[P]]rev[/] [yellow][[J]]ump[/] [yellow][[1-30]][/] Select row [cyan][[S]]earch[/] [dim][[B]]ack[/]");
+            var input = AnsiConsole.Prompt(
+                new TextPrompt<string>("[cyan]Command:[/]")
+                    .PromptStyle("green")
+                    .AllowEmpty()
+            ).Trim().ToLower();
+
+            if (string.IsNullOrEmpty(input) || input == "b" || input == "back")
+            {
+                return null; // Back
+            }
+            else if (input == "n" || input == "next")
+            {
+                if (currentPage < totalPages) currentPage++;
+            }
+            else if (input == "p" || input == "prev" || input == "previous")
+            {
+                if (currentPage > 1) currentPage--;
+            }
+            else if (input == "j" || input == "jump")
+            {
+                var pageNum = AnsiConsole.Prompt(
+                    new TextPrompt<int>($"[cyan]Jump to page (1-{totalPages}):[/]")
+                        .PromptStyle("yellow")
+                        .ValidationErrorMessage($"[red]Please enter a number between 1 and {totalPages}[/]")
+                        .Validate(p => p >= 1 && p <= totalPages)
+                );
+                currentPage = pageNum;
+            }
+            else if (input == "s" || input == "search")
+            {
+                return SearchAndSelectArtist(sorted);
+            }
+            else if (int.TryParse(input, out int rowNum) && rowNum >= 1 && rowNum <= pageSize)
+            {
+                // Select artist from current page
+                var startIndex = (currentPage - 1) * pageSize;
+                var pageItems = sorted.Skip(startIndex).Take(pageSize).ToList();
+
+                if (rowNum <= pageItems.Count)
+                {
+                    return pageItems[rowNum - 1];
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]Row {rowNum} not available on this page (only {pageItems.Count} rows)[/]");
+                    AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                    Console.ReadKey(intercept: true);
+                }
+            }
+            else
+            {
+                AnsiConsole.MarkupLine($"[red]Unknown command: {input.EscapeMarkup()}[/]");
+                AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Search for artist by name and select from results
+    /// </summary>
+    private Artist? SearchAndSelectArtist(List<Artist> allArtists)
+    {
+        var searchTerm = AnsiConsole.Prompt(
+            new TextPrompt<string>("[cyan]Search artist name:[/]")
+                .PromptStyle("green")
+                .AllowEmpty()
+        );
+
+        if (string.IsNullOrWhiteSpace(searchTerm)) return null;
+
+        var matches = allArtists
+            .Where(a => a.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => a.Name)
+            .ToList();
+
+        if (!matches.Any())
+        {
+            AnsiConsole.MarkupLine($"\n[red]No artists found matching '{searchTerm.EscapeMarkup()}'[/]");
+            AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+            Console.ReadKey(intercept: true);
+            return null;
+        }
+
+        if (matches.Count == 1)
+        {
+            AnsiConsole.MarkupLine($"\n[green]Selected:[/] {matches[0].Name.EscapeMarkup()}");
+            return matches[0];
+        }
+
+        // Multiple matches - show selection
+        AnsiConsole.WriteLine();
+        return MenuBuilder.SelectArtist(matches);
+    }
+
+    /// <summary>
+    /// Navigation flow: Paginated Playlists Table → Select → Tracks → Track Detail
     /// </summary>
     public async Task NavigateByPlaylistAsync()
     {
@@ -121,7 +197,7 @@ public class NavigationService
             AnsiConsole.Write(new Rule("[blue]Browse by Playlist[/]").RuleStyle("blue"));
             AnsiConsole.WriteLine();
 
-            // Step 1: Get all playlists and show comprehensive table
+            // Step 1: Get all playlists
             var playlists = await _analyticsService.GetAllPlaylistsSortedByNameAsync();
 
             if (!playlists.Any())
@@ -132,49 +208,9 @@ public class NavigationService
                 return;
             }
 
-            // Show full table for visualization
-            SpectreReportFormatter.RenderPlaylistsTable(playlists);
-            AnsiConsole.WriteLine();
-
-            // Step 2: Search/filter to select playlist
-            var searchTerm = AnsiConsole.Prompt(
-                new TextPrompt<string>("[cyan]Enter playlist name to view tracks[/] [dim](or 'back' to return)[/]:")
-                    .PromptStyle("green")
-                    .AllowEmpty()
-            );
-
-            if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Equals("back", StringComparison.OrdinalIgnoreCase))
-            {
-                return; // Back to main menu
-            }
-
-            // Filter playlists by search term
-            var matches = playlists
-                .Where(p => p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(p => p.Name)
-                .ToList();
-
-            if (!matches.Any())
-            {
-                AnsiConsole.MarkupLine($"\n[red]No playlists found matching '{searchTerm.EscapeMarkup()}'[/]");
-                AnsiConsole.MarkupLine("[dim]Press any key to try again...[/]");
-                Console.ReadKey(intercept: true);
-                continue;
-            }
-
-            // If multiple matches, let user select
-            Playlist selectedPlaylist;
-            if (matches.Count == 1)
-            {
-                selectedPlaylist = matches[0];
-                AnsiConsole.MarkupLine($"\n[green]Selected:[/] {selectedPlaylist.Name.EscapeMarkup()}");
-            }
-            else
-            {
-                AnsiConsole.WriteLine();
-                selectedPlaylist = MenuBuilder.SelectPlaylist(matches)!;
-                if (selectedPlaylist == null) continue; // Back to search
-            }
+            // Step 2: Browse paginated table and select playlist
+            var selectedPlaylist = BrowsePaginatedPlaylists(playlists);
+            if (selectedPlaylist == null) return; // Back to main menu
 
             // Step 3: Get tracks in this playlist (preserve order)
             AnsiConsole.Clear();
@@ -202,6 +238,122 @@ public class NavigationService
             // Step 5: Show detail report
             await ShowTrackDetailAsync(selectedTrack.Id);
         }
+    }
+
+    /// <summary>
+    /// Browse paginated playlists table with navigation controls
+    /// </summary>
+    private Playlist? BrowsePaginatedPlaylists(List<Playlist> allPlaylists)
+    {
+        const int pageSize = 30;
+        int currentPage = 1;
+        var sorted = allPlaylists.OrderBy(p => p.Name).ToList();
+
+        while (true)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule("[blue]Browse Playlists[/]").RuleStyle("blue"));
+            AnsiConsole.WriteLine();
+
+            // Render current page
+            SpectreReportFormatter.RenderPlaylistsTablePage(sorted, currentPage, pageSize, out int totalPages);
+            AnsiConsole.WriteLine();
+
+            // Show navigation prompt
+            AnsiConsole.MarkupLine("[cyan]Options:[/] [green][[N]]ext[/] [green][[P]]rev[/] [yellow][[J]]ump[/] [yellow][[1-30]][/] Select row [cyan][[S]]earch[/] [dim][[B]]ack[/]");
+            var input = AnsiConsole.Prompt(
+                new TextPrompt<string>("[cyan]Command:[/]")
+                    .PromptStyle("green")
+                    .AllowEmpty()
+            ).Trim().ToLower();
+
+            if (string.IsNullOrEmpty(input) || input == "b" || input == "back")
+            {
+                return null; // Back
+            }
+            else if (input == "n" || input == "next")
+            {
+                if (currentPage < totalPages) currentPage++;
+            }
+            else if (input == "p" || input == "prev" || input == "previous")
+            {
+                if (currentPage > 1) currentPage--;
+            }
+            else if (input == "j" || input == "jump")
+            {
+                var pageNum = AnsiConsole.Prompt(
+                    new TextPrompt<int>($"[cyan]Jump to page (1-{totalPages}):[/]")
+                        .PromptStyle("yellow")
+                        .ValidationErrorMessage($"[red]Please enter a number between 1 and {totalPages}[/]")
+                        .Validate(p => p >= 1 && p <= totalPages)
+                );
+                currentPage = pageNum;
+            }
+            else if (input == "s" || input == "search")
+            {
+                return SearchAndSelectPlaylist(sorted);
+            }
+            else if (int.TryParse(input, out int rowNum) && rowNum >= 1 && rowNum <= pageSize)
+            {
+                // Select playlist from current page
+                var startIndex = (currentPage - 1) * pageSize;
+                var pageItems = sorted.Skip(startIndex).Take(pageSize).ToList();
+
+                if (rowNum <= pageItems.Count)
+                {
+                    return pageItems[rowNum - 1];
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]Row {rowNum} not available on this page (only {pageItems.Count} rows)[/]");
+                    AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                    Console.ReadKey(intercept: true);
+                }
+            }
+            else
+            {
+                AnsiConsole.MarkupLine($"[red]Unknown command: {input.EscapeMarkup()}[/]");
+                AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Search for playlist by name and select from results
+    /// </summary>
+    private Playlist? SearchAndSelectPlaylist(List<Playlist> allPlaylists)
+    {
+        var searchTerm = AnsiConsole.Prompt(
+            new TextPrompt<string>("[cyan]Search playlist name:[/]")
+                .PromptStyle("green")
+                .AllowEmpty()
+        );
+
+        if (string.IsNullOrWhiteSpace(searchTerm)) return null;
+
+        var matches = allPlaylists
+            .Where(p => p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Name)
+            .ToList();
+
+        if (!matches.Any())
+        {
+            AnsiConsole.MarkupLine($"\n[red]No playlists found matching '{searchTerm.EscapeMarkup()}'[/]");
+            AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+            Console.ReadKey(intercept: true);
+            return null;
+        }
+
+        if (matches.Count == 1)
+        {
+            AnsiConsole.MarkupLine($"\n[green]Selected:[/] {matches[0].Name.EscapeMarkup()}");
+            return matches[0];
+        }
+
+        // Multiple matches - show selection
+        AnsiConsole.WriteLine();
+        return MenuBuilder.SelectPlaylist(matches);
     }
 
     /// <summary>

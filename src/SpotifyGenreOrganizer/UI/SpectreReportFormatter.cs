@@ -339,95 +339,111 @@ public static class SpectreReportFormatter
     }
 
     /// <summary>
-    /// Renders a comprehensive table of all artists sorted alphabetically
+    /// Renders a paginated table of artists
     /// </summary>
-    public static void RenderArtistsTable(List<Artist> artists)
+    public static void RenderArtistsTablePage(List<Artist> allArtists, int page, int pageSize, out int totalPages)
     {
-        if (!artists.Any())
+        if (!allArtists.Any())
         {
-            AnsiConsole.MarkupLine("[yellow]No artists found in database.[/]");
+            AnsiConsole.MarkupLine("[yellow]No artists found.[/]");
+            totalPages = 0;
             return;
         }
 
-        // Sort alphabetically by default for better browsing
-        var sorted = artists.OrderBy(a => a.Name).ToList();
+        // Sort alphabetically for better browsing
+        var sorted = allArtists.OrderBy(a => a.Name).ToList();
+        totalPages = (int)Math.Ceiling(sorted.Count / (double)pageSize);
+
+        // Clamp page to valid range
+        page = Math.Max(1, Math.Min(page, totalPages));
+
+        var startIndex = (page - 1) * pageSize;
+        var pageItems = sorted.Skip(startIndex).Take(pageSize).ToList();
 
         var table = new Table()
             .Border(TableBorder.Rounded)
             .BorderColor(Color.Yellow)
-            .Title($"[yellow bold]👥 All Artists ({sorted.Count} total)[/]")
+            .Title($"[yellow bold]👥 Artists - Page {page}/{totalPages}[/] [dim]({sorted.Count} total)[/]")
             .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
             .AddColumn(new TableColumn("[green]Artist Name[/]").LeftAligned())
             .AddColumn(new TableColumn("[blue]Followers[/]").RightAligned())
-            .AddColumn(new TableColumn("[magenta]Popularity[/]").RightAligned())
+            .AddColumn(new TableColumn("[magenta]Pop[/]").RightAligned())
             .AddColumn(new TableColumn("[yellow]Genres[/]").LeftAligned());
 
-        int index = 1;
-        foreach (var artist in sorted)
+        int rowNum = 1;
+        foreach (var artist in pageItems)
         {
             var genresDisplay = artist.Genres.Any()
-                ? string.Join(", ", artist.Genres.Take(5)).EscapeMarkup()
+                ? string.Join(", ", artist.Genres.Take(3)).EscapeMarkup()
                 : "[dim]none[/]";
 
-            if (artist.Genres.Length > 5)
+            if (artist.Genres.Length > 3)
             {
-                genresDisplay += $" [dim](+{artist.Genres.Length - 5} more)[/]";
+                genresDisplay += $" [dim](+{artist.Genres.Length - 3})[/]";
             }
 
             table.AddRow(
-                index.ToString(),
+                rowNum.ToString(),
                 artist.Name.EscapeMarkup(),
                 $"{artist.Followers:N0}",
                 artist.Popularity.ToString(),
                 genresDisplay
             );
-            index++;
+            rowNum++;
         }
 
         AnsiConsole.Write(table);
     }
 
     /// <summary>
-    /// Renders a comprehensive table of all playlists sorted alphabetically
+    /// Renders a paginated table of playlists
     /// </summary>
-    public static void RenderPlaylistsTable(List<Playlist> playlists)
+    public static void RenderPlaylistsTablePage(List<Playlist> allPlaylists, int page, int pageSize, out int totalPages)
     {
-        if (!playlists.Any())
+        if (!allPlaylists.Any())
         {
-            AnsiConsole.MarkupLine("[yellow]No playlists found in database.[/]");
+            AnsiConsole.MarkupLine("[yellow]No playlists found.[/]");
+            totalPages = 0;
             return;
         }
 
-        // Sort alphabetically by default
-        var sorted = playlists.OrderBy(p => p.Name).ToList();
+        // Sort alphabetically
+        var sorted = allPlaylists.OrderBy(p => p.Name).ToList();
+        totalPages = (int)Math.Ceiling(sorted.Count / (double)pageSize);
+
+        // Clamp page to valid range
+        page = Math.Max(1, Math.Min(page, totalPages));
+
+        var startIndex = (page - 1) * pageSize;
+        var pageItems = sorted.Skip(startIndex).Take(pageSize).ToList();
 
         var table = new Table()
             .Border(TableBorder.Rounded)
             .BorderColor(Color.Blue)
-            .Title($"[blue bold]📂 All Playlists ({sorted.Count} total)[/]")
+            .Title($"[blue bold]📂 Playlists - Page {page}/{totalPages}[/] [dim]({sorted.Count} total)[/]")
             .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
             .AddColumn(new TableColumn("[green]Playlist Name[/]").LeftAligned())
             .AddColumn(new TableColumn("[yellow]Tracks[/]").RightAligned())
             .AddColumn(new TableColumn("[magenta]Owner[/]").LeftAligned())
             .AddColumn(new TableColumn("[blue]Description[/]").LeftAligned());
 
-        int index = 1;
-        foreach (var playlist in sorted)
+        int rowNum = 1;
+        foreach (var playlist in pageItems)
         {
             var description = !string.IsNullOrEmpty(playlist.Description)
-                ? (playlist.Description.Length > 50
-                    ? playlist.Description.Substring(0, 47).EscapeMarkup() + "..."
+                ? (playlist.Description.Length > 40
+                    ? playlist.Description.Substring(0, 37).EscapeMarkup() + "..."
                     : playlist.Description.EscapeMarkup())
                 : "[dim]none[/]";
 
             table.AddRow(
-                index.ToString(),
+                rowNum.ToString(),
                 playlist.Name.EscapeMarkup(),
                 playlist.PlaylistTracks.Count.ToString(),
                 playlist.OwnerId.EscapeMarkup(),
                 description
             );
-            index++;
+            rowNum++;
         }
 
         AnsiConsole.Write(table);
