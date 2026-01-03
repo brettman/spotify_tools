@@ -199,7 +199,8 @@
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", $"Error loading data: {ex.Message}");
+            // Log error but don't show alert during prerender
+            Console.WriteLine($"Error loading data: {ex.Message}");
         }
         finally
         {
@@ -220,7 +221,7 @@
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", $"Error loading tracks: {ex.Message}");
+            Console.WriteLine($"Error loading tracks: {ex.Message}");
         }
         finally
         {
