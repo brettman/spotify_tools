@@ -74,13 +74,17 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
-app.UseCors();
-app.UseAuthorization();
+// Disable HTTPS redirection for now (development only)
+// app.UseHttpsRedirection();
 app.UseStaticFiles();
+app.UseRouting();
+app.UseCors();
 app.UseAntiforgery();
 
+// Map API controllers
 app.MapControllers();
+
+// Map Blazor components
 app.MapRazorComponents<SpotifyTools.Web.Components.App>()
     .AddInteractiveServerRenderMode();
 
