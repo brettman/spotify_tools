@@ -13,8 +13,8 @@ using SpotifyTools.Data.DbContext;
 namespace SpotifyTools.Data.Migrations
 {
     [DbContext(typeof(SpotifyDbContext))]
-    [Migration("20260102180421_AddSavedClustersTable")]
-    partial class AddSavedClustersTable
+    [Migration("20260103095757_AddSavedClustersTableSnakeCase")]
+    partial class AddSavedClustersTableSnakeCase
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

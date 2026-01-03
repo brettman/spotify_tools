@@ -116,20 +116,32 @@ SpotifyTools/
 - **Spectre.Console** (0.49.1): Beautiful CLI tables, menus, progress bars
 - **PostgreSQL 16**: Database (Docker container)
 
-## Genre Clustering & Playlist Organization (New Feature)
+## Genre Clustering & Playlist Organization
 
-**Status:** In active development (Jan 2026)
+**Status:** ✅ Core functionality complete (Jan 2026)
 
-**Goal:** Organize user's Spotify library into genre-based playlists using intelligent clustering.
+**Goal:** Organize user's Spotify library into genre-based playlists using intelligent clustering with full persistence and management capabilities.
 
-### Current Implementation
+### Complete Implementation
 
 **Analytics Service Methods:**
 - `GetGenreAnalysisReportAsync()` - Comprehensive genre landscape analysis
-- `GetAvailableGenreSeedsAsync()` - Fetches official Spotify genre seeds from `/recommendations/available-genre-seeds`
+- `GetAvailableGenreSeedsAsync()` - Fetches official Spotify genre seeds
 - `SuggestGenreClustersAsync(minTracks)` - Auto-generates genre clusters using pattern matching
 - `GetTracksByGenreAsync()` - Maps tracks to genres via artist relationships
 - `GetClusterPlaylistReportAsync(cluster)` - Generates detailed track list for a cluster
+- ✅ `SaveClusterAsync(cluster, customName)` - Persists refined clusters to database
+- ✅ `GetSavedClustersAsync()` - Loads all saved clusters
+- ✅ `GetSavedClusterByIdAsync(id)` - Loads specific cluster
+- ✅ `UpdateClusterAsync(id, cluster)` - Updates existing cluster
+- ✅ `DeleteClusterAsync(id)` - Deletes cluster
+- ✅ `FinalizeClusterAsync(id)` - Marks cluster ready for playlist generation
+
+**Database Persistence:**
+- **Table:** `saved_clusters` (snake_case columns)
+- **Entity:** `SavedCluster` with fields: id, name, description, genres (CSV), primary_genre, is_auto_generated, created_at, updated_at, is_finalized
+- **Repository:** `SavedClusterRepository` with specialized queries
+- **Migration:** `20260103095757_AddSavedClustersTableSnakeCase`
 
 **Clustering Algorithm:**
 - Uses 10 predefined patterns (Rock & Alternative, Pop & Dance, Electronic & EDM, Hip Hop & Rap, R&B & Soul, Metal & Heavy, Jazz & Blues, Folk & Acoustic, Classical & Orchestral, Latin & World)
@@ -137,49 +149,58 @@ SpotifyTools/
 - Creates individual clusters for large remaining genres (40+ tracks)
 - Filters to minimum 20 tracks per cluster
 
-**Interactive Cluster Refinement (UI):**
-1. View suggested clusters with track/artist counts
-2. Select cluster to review
-3. See ALL genres in cluster with detailed breakdown
-4. Multi-select removal of genres that don't fit (e.g., remove "smooth jazz" from "hard bop")
-5. **Orphaned Genre Handling (Option D):**
-   - Shows removed genres with track counts
-   - Options: Create new clusters (if 20+ tracks), add to "Unclustered" bucket, suggest alternatives, or leave unclustered
-   - Large genres (20+ tracks) can become standalone clusters
-   - Small genres go to "Unclustered" for later review
+**Complete Workflow:**
+1. **Generate** suggested clusters from library
+2. **Review & Refine** by removing genres that don't fit
+3. **Save** refined clusters with custom names
+4. **View** all saved clusters in management UI
+5. **Edit** saved clusters to further refine
+6. **Finalize** when ready for playlist generation
+7. **Delete** unwanted clusters
+
+**Interactive Cluster Refinement:**
+- View suggested clusters with track/artist counts
+- Select cluster to review ALL genres with detailed breakdown
+- Multi-select removal of genres that don't fit (e.g., remove "smooth jazz" from "hard bop")
+- Description automatically updates to reflect refined genre list
+- **Orphaned Genre Handling (Option D):**
+  - Shows removed genres with track counts
+  - Options: Create new clusters (if 20+ tracks), add to "Unclustered" bucket, suggest alternatives, or leave unclustered
+  - Large genres (20+ tracks) can become standalone clusters
+  - Small genres go to "Unclustered" for later review
+
+**Cluster Management UI:**
+- View all saved clusters in a table (ID, name, tracks, genres, status, type)
+- Select cluster to view details (description, genre list, track counts)
+- Edit cluster genres (remove unwanted genres, updates description)
+- Delete clusters with confirmation
+- Finalize clusters for playlist generation
+- All operations persist to database
 
 **Models:**
-- `GenreCluster` - Represents a cluster with name, genres list, track/artist counts
+- `GenreCluster` - In-memory cluster representation (id, name, description, genres list, track/artist counts, percentage)
+- `SavedCluster` - Database entity (persisted clusters)
 - `GenreAnalysisReport` - Full genre landscape with overlaps and statistics
-- `ClusterPlaylistReport` - Track details for a cluster (artist, song, duration, album, genres)
+- `ClusterPlaylistReport` - Track details for a cluster
 
-**UI Components:**
-- Main menu: "Explore Genre Clusters & Playlists"
-- Cluster summary table with track counts and percentages
-- Interactive cluster review with genre breakdown
-- Multi-select genre removal interface
-- Orphaned genre handler with smart suggestions
-
-### Known Limitations & Next Steps
-
-**Current Limitations:**
-- Cluster refinements are preview-only (not persisted)
-- No track preview within clusters yet
-- Alternative cluster suggestions not implemented
-- Cannot generate actual Spotify playlists yet
+**Known Issues:**
+See `issues.md` for tracked bugs and UX improvements:
+- Minor: Cannot exit edit screen without making changes
+- Medium: Already-organized genres still appear in new suggestions
 
 **Planned Features:**
-1. Save/persist refined clusters to database
-2. Track list preview (Artist | Song | Duration | Album | Genre)
-3. Alternative cluster suggestions using genre overlap analysis
-4. Spotify playlist generation from approved clusters
-5. Unclustered genre tracking and management
+1. Track list preview within clusters (Artist | Song | Duration | Album | Genre)
+2. Filter already-organized genres from new suggestions
+3. Unclustered genre tracking and management
+4. Spotify playlist generation from finalized clusters
+5. Alternative cluster suggestions using genre overlap analysis
 6. Custom cluster creation from scratch
 
 **User Feedback Incorporated:**
 - Genre clustering must respect subgenre differences (e.g., "hard bop" ≠ "smooth jazz")
 - Interactive refinement needed instead of automatic clustering
 - Removed genres need intelligent handling (not just dropped)
+- Description must reflect actual refined genre list, not original
 
 ## Important Implementation Details
 

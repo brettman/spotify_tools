@@ -4,7 +4,8 @@
       "Bash(find:*)",
       "Bash(git reset:*)",
       "Bash(git add:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(dotnet build:*)"
     ],
     "deny": [],
     "ask": []

@@ -6,6 +6,11 @@ namespace SpotifyTools.Data.Repositories;
 public interface ISavedClusterRepository : IRepository<SavedCluster>
 {
     /// <summary>
+    /// Get cluster by integer ID
+    /// </summary>
+    Task<SavedCluster?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets all saved clusters ordered by creation date
     /// </summary>
     Task<List<SavedCluster>> GetAllOrderedAsync();

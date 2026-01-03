@@ -17,12 +17,17 @@ A C# application that syncs your Spotify library to PostgreSQL for offline acces
 - ✅ **Genre Analysis** - Comprehensive genre landscape with overlaps and statistics
 - ✅ **Genre Clustering** - Auto-suggested clusters for playlist organization
 - ✅ **Interactive Cluster Refinement** - Review and remove genres that don't fit
+- ✅ **Cluster Persistence** - Save, edit, delete, and finalize refined clusters
+- ✅ **Cluster Management** - Full CRUD operations with database persistence
 - ✅ **Smart Genre Handling** - Orphaned genres intelligently reassigned or tracked
 - ✅ **Artist Insights** - Top artists by follower count, track count, and popularity
 - ❌ **Audio Features** - ~~Unavailable (Spotify API restricted as of Nov 27, 2024)~~
 
 ### Coming Soon
-- ⏳ **Advanced Reports** - Genre trends, artist discovery, playlist insights
+- 📅 **Playlist Generation** - Create Spotify playlists from finalized clusters
+- 📅 **Track Preview** - View track lists within clusters before playlist creation
+- 📅 **Genre Filter** - Exclude already-organized genres from new suggestions
+- 📅 **Advanced Reports** - Genre trends, artist discovery, playlist insights
 - 📅 **Incremental Sync** - Update only changed data
 - 📅 **Web Interface** - Browse and analyze your library in a browser
 - 📅 **Audio Features** - Exploring third-party APIs and local analysis tools

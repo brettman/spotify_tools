@@ -93,4 +93,47 @@ public interface IAnalyticsService
     /// <param name="cluster">The genre cluster to generate a report for</param>
     /// <returns>Playlist report with track details</returns>
     Task<ClusterPlaylistReport> GetClusterPlaylistReportAsync(GenreCluster cluster);
+
+    /// <summary>
+    /// Saves a refined genre cluster to the database
+    /// </summary>
+    /// <param name="cluster">The cluster to save</param>
+    /// <param name="customName">Optional custom name (uses cluster.Name if not provided)</param>
+    /// <returns>The saved cluster ID</returns>
+    Task<int> SaveClusterAsync(GenreCluster cluster, string? customName = null);
+
+    /// <summary>
+    /// Gets all saved clusters ordered by creation date
+    /// </summary>
+    /// <returns>List of saved clusters</returns>
+    Task<List<GenreCluster>> GetSavedClustersAsync();
+
+    /// <summary>
+    /// Gets a saved cluster by ID
+    /// </summary>
+    /// <param name="id">The cluster ID</param>
+    /// <returns>The saved cluster or null if not found</returns>
+    Task<GenreCluster?> GetSavedClusterByIdAsync(int id);
+
+    /// <summary>
+    /// Updates a saved cluster
+    /// </summary>
+    /// <param name="id">The cluster ID to update</param>
+    /// <param name="cluster">Updated cluster data</param>
+    /// <returns>True if updated successfully</returns>
+    Task<bool> UpdateClusterAsync(int id, GenreCluster cluster);
+
+    /// <summary>
+    /// Deletes a saved cluster
+    /// </summary>
+    /// <param name="id">The cluster ID to delete</param>
+    /// <returns>True if deleted successfully</returns>
+    Task<bool> DeleteClusterAsync(int id);
+
+    /// <summary>
+    /// Marks a cluster as finalized and ready for playlist generation
+    /// </summary>
+    /// <param name="id">The cluster ID</param>
+    /// <returns>True if finalized successfully</returns>
+    Task<bool> FinalizeClusterAsync(int id);
 }

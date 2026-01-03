@@ -10,6 +10,11 @@ public class SavedClusterRepository : Repository<SavedCluster>, ISavedClusterRep
     {
     }
 
+    public async Task<SavedCluster?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.FindAsync(new object[] { id }, cancellationToken);
+    }
+
     public async Task<List<SavedCluster>> GetAllOrderedAsync()
     {
         return await _dbSet
