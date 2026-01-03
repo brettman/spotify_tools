@@ -26,6 +26,7 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
     public DbSet<AudioAnalysis> AudioAnalyses => Set<AudioAnalysis>();
     public DbSet<AudioAnalysisSection> AudioAnalysisSections => Set<AudioAnalysisSection>();
     public DbSet<SavedCluster> SavedClusters => Set<SavedCluster>();
+    public DbSet<TrackExclusion> TrackExclusions => Set<TrackExclusion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -256,6 +257,32 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.HasIndex(e => e.Name);
             entity.HasIndex(e => e.CreatedAt);
             entity.HasIndex(e => e.IsFinalized);
+        });
+
+        // TrackExclusion configuration
+        modelBuilder.Entity<TrackExclusion>(entity =>
+        {
+            entity.ToTable("track_exclusions");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.TrackId).HasMaxLength(50).IsRequired();
+
+            // Unique constraint: one track can only be excluded once per cluster
+            entity.HasIndex(e => new { e.ClusterId, e.TrackId }).IsUnique();
+
+            // Foreign key to SavedCluster with cascade delete
+            entity.HasOne(e => e.Cluster)
+                .WithMany()
+                .HasForeignKey(e => e.ClusterId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Foreign key to Track with cascade delete
+            entity.HasOne(e => e.Track)
+                .WithMany()
+                .HasForeignKey(e => e.TrackId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.ExcludedAt);
         });
     }
 }

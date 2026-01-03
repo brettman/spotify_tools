@@ -943,7 +943,7 @@ public class CliMenuService
                     "📝 Edit cluster genres",
                     "🗑️  Delete cluster",
                     "✅ Finalize for playlist generation",
-                    "🎵 View tracks (coming soon)",
+                    "🎵 View tracks",
                     "← Back to cluster list"
                 })
         );
@@ -959,10 +959,8 @@ public class CliMenuService
             case "✅ Finalize for playlist generation":
                 await FinalizeClusterAsync(cluster);
                 break;
-            case "🎵 View tracks (coming soon)":
-                AnsiConsole.MarkupLine("[yellow]💡 This feature is coming soon![/]");
-                AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
-                Console.ReadKey(intercept: true);
+            case "🎵 View tracks":
+                await ViewClusterTracksAsync(cluster);
                 break;
         }
     }
@@ -1123,7 +1121,22 @@ public class CliMenuService
             if (success)
             {
                 AnsiConsole.MarkupLine($"[green]✓ Cluster '{cluster.Name.EscapeMarkup()}' finalized successfully![/]");
-                AnsiConsole.MarkupLine("[dim]This cluster is now ready for playlist generation[/]");
+                AnsiConsole.WriteLine();
+
+                // Offer to create Spotify playlist
+                var createPlaylist = AnsiConsole.Confirm(
+                    "[green]Create Spotify playlist now?[/]",
+                    true
+                );
+
+                if (createPlaylist)
+                {
+                    await CreateSpotifyPlaylistAsync(clusterId, cluster.Name);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[yellow]Playlist creation skipped. You can create it later from the cluster management menu.[/]");
+                }
             }
             else
             {
@@ -1139,6 +1152,368 @@ public class CliMenuService
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
         Console.ReadKey(intercept: true);
+    }
+
+    private async Task CreateSpotifyPlaylistAsync(int clusterId, string clusterName)
+    {
+        AnsiConsole.WriteLine();
+
+        // Ask if playlist should be public or private
+        var makePublic = AnsiConsole.Confirm(
+            "[cyan]Make playlist public?[/] [dim](Otherwise it will be private)[/]",
+            false
+        );
+
+        AnsiConsole.WriteLine();
+
+        try
+        {
+            string? playlistId = null;
+
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .StartAsync($"🎵 Creating Spotify playlist '{clusterName.EscapeMarkup()}'...", async ctx =>
+                {
+                    ctx.Status($"🔐 Checking Spotify authentication...");
+                    await Task.Delay(500); // Brief delay for status visibility
+
+                    ctx.Status($"🎵 Creating playlist...");
+                    playlistId = await _analyticsService.CreatePlaylistFromClusterAsync(clusterId, makePublic);
+                });
+
+            if (!string.IsNullOrEmpty(playlistId))
+            {
+                AnsiConsole.MarkupLine($"[green]✓ Spotify playlist created successfully![/]");
+                AnsiConsole.MarkupLine($"[cyan]Playlist ID:[/] {playlistId}");
+                AnsiConsole.MarkupLine($"[dim]View it in Spotify: https://open.spotify.com/playlist/{playlistId}[/]");
+            }
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already has a playlist"))
+        {
+            AnsiConsole.MarkupLine($"[yellow]⚠️  This cluster already has a playlist.[/]");
+            AnsiConsole.MarkupLine($"[dim]{ex.Message.EscapeMarkup()}[/]");
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]❌ Error creating Spotify playlist: {ex.Message.EscapeMarkup()}[/]");
+            _logger.LogError(ex, "Failed to create Spotify playlist for cluster {ClusterId}", clusterId);
+        }
+    }
+
+    private async Task ViewClusterTracksAsync(GenreCluster cluster)
+    {
+        // Load tracks for the cluster
+        ClusterPlaylistReport? report = null;
+
+        await AnsiConsole.Status()
+            .StartAsync($"🎵 Loading tracks for '{cluster.Name.EscapeMarkup()}'...", async ctx =>
+            {
+                report = await _analyticsService.GetClusterPlaylistReportAsync(cluster);
+            });
+
+        if (report == null)
+        {
+            AnsiConsole.MarkupLine("[red]Failed to load tracks for this cluster.[/]");
+            AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+            Console.ReadKey(intercept: true);
+            return;
+        }
+
+        if (!report.Tracks.Any())
+        {
+            AnsiConsole.MarkupLine("[yellow]No tracks found for this cluster.[/]");
+            AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+            Console.ReadKey(intercept: true);
+            return;
+        }
+
+        // Browse tracks with pagination
+        const int pageSize = 30;
+        int currentPage = 1;
+
+        while (true)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule($"[green bold]🎵 Tracks in: {cluster.Name.EscapeMarkup()}[/]").RuleStyle("green"));
+            AnsiConsole.WriteLine();
+
+            // Show cluster info panel
+            var infoPanel = new Panel(
+                $"[cyan]Genres:[/] {string.Join(", ", cluster.Genres.Take(5).Select(g => g.EscapeMarkup()))}" +
+                (cluster.Genres.Count > 5 ? $" [dim](+{cluster.Genres.Count - 5} more)[/]" : "") +
+                $"\n[cyan]Total Tracks:[/] {report.Tracks.Count:N0}\n[cyan]Total Artists:[/] {cluster.TotalArtists:N0}")
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Cyan)
+                .Header("[cyan bold]Cluster Info[/]");
+
+            AnsiConsole.Write(infoPanel);
+            AnsiConsole.WriteLine();
+
+            // Render current page
+            SpectreReportFormatter.RenderTracksTablePage(
+                report.Tracks,
+                currentPage,
+                pageSize,
+                out int totalPages
+            );
+            AnsiConsole.WriteLine();
+
+            // Show navigation prompt
+            AnsiConsole.MarkupLine("[cyan]Options:[/] [green][[N]]ext[/] [green][[P]]rev[/] [yellow][[J]]ump[/] [yellow][[1-30]][/] Select row [cyan][[E]]dit mode[/] [dim][[B]]ack[/]");
+            var input = AnsiConsole.Prompt(
+                new TextPrompt<string>("[cyan]Command:[/]")
+                    .PromptStyle("green")
+                    .AllowEmpty()
+            ).Trim().ToLower();
+
+            if (string.IsNullOrEmpty(input) || input == "b" || input == "back")
+            {
+                return; // Back to cluster management
+            }
+            else if (input == "n" || input == "next")
+            {
+                if (currentPage < totalPages) currentPage++;
+            }
+            else if (input == "p" || input == "prev" || input == "previous")
+            {
+                if (currentPage > 1) currentPage--;
+            }
+            else if (input == "j" || input == "jump")
+            {
+                var pageNum = AnsiConsole.Prompt(
+                    new TextPrompt<int>($"[cyan]Jump to page (1-{totalPages}):[/]")
+                        .PromptStyle("yellow")
+                        .ValidationErrorMessage($"[red]Please enter a number between 1 and {totalPages}[/]")
+                        .Validate(p => p >= 1 && p <= totalPages)
+                );
+                currentPage = pageNum;
+            }
+            else if (input == "e" || input == "edit")
+            {
+                await EditClusterTracksAsync(cluster, report);
+                return; // Return after edit mode
+            }
+            else if (int.TryParse(input, out int rowNum) && rowNum >= 1 && rowNum <= pageSize)
+            {
+                // Select track from current page to view details
+                var startIndex = (currentPage - 1) * pageSize;
+                var sorted = report.Tracks
+                    .OrderBy(t => t.ArtistName)
+                    .ThenBy(t => t.TrackName)
+                    .ToList();
+                var pageItems = sorted.Skip(startIndex).Take(pageSize).ToList();
+
+                if (rowNum <= pageItems.Count)
+                {
+                    var selectedTrack = pageItems[rowNum - 1];
+                    await ShowTrackDetailForClusterAsync(selectedTrack);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]Row {rowNum} not available on this page (only {pageItems.Count} rows)[/]");
+                    AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                    Console.ReadKey(intercept: true);
+                }
+            }
+            else
+            {
+                AnsiConsole.MarkupLine($"[red]Unknown command: {input.EscapeMarkup()}[/]");
+                AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                Console.ReadKey(intercept: true);
+            }
+        }
+    }
+
+    private async Task ShowTrackDetailForClusterAsync(ClusterPlaylistReport.TrackInfo track)
+    {
+        AnsiConsole.Clear();
+        AnsiConsole.Write(new Rule($"[green bold]🎵 Track Details[/]").RuleStyle("green"));
+        AnsiConsole.WriteLine();
+
+        var detailsTable = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Green)
+            .Title("[green bold]Track Information[/]")
+            .AddColumn("[cyan]Property[/]")
+            .AddColumn("[yellow]Value[/]");
+
+        detailsTable.AddRow("Track", track.TrackName.EscapeMarkup());
+        detailsTable.AddRow("Artist", track.ArtistName.EscapeMarkup());
+        detailsTable.AddRow("Album", (track.AlbumName ?? "[dim]unknown[/]").EscapeMarkup());
+        detailsTable.AddRow("Duration", track.FormattedDuration);
+        detailsTable.AddRow("Popularity", track.Popularity.ToString());
+
+        if (track.AddedAt.HasValue)
+        {
+            detailsTable.AddRow("Added", track.AddedAt.Value.ToString("MMM dd, yyyy"));
+        }
+
+        var matchedGenres = track.MatchedGenres.Any()
+            ? string.Join(", ", track.MatchedGenres.Select(g => g.EscapeMarkup()))
+            : "[dim]none[/]";
+        detailsTable.AddRow("Matched Genres", matchedGenres);
+
+        var allGenres = track.Genres.Any()
+            ? string.Join(", ", track.Genres.Select(g => g.EscapeMarkup()))
+            : "[dim]none[/]";
+        detailsTable.AddRow("All Artist Genres", allGenres);
+
+        AnsiConsole.Write(detailsTable);
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[dim]Press any key to go back...[/]");
+        Console.ReadKey(intercept: true);
+    }
+
+    private async Task EditClusterTracksAsync(GenreCluster cluster, ClusterPlaylistReport report)
+    {
+        if (!int.TryParse(cluster.Id, out int clusterId))
+        {
+            AnsiConsole.MarkupLine("[red]Cannot edit tracks - cluster ID is invalid.[/]");
+            AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+            Console.ReadKey(intercept: true);
+            return;
+        }
+
+        var tracksToRemove = new List<ClusterPlaylistReport.TrackInfo>();
+
+        // Build selection list
+        var sorted = report.Tracks
+            .OrderBy(t => t.ArtistName)
+            .ThenBy(t => t.TrackName)
+            .ToList();
+
+        while (true)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule($"[yellow bold]✏️  Edit Tracks: {cluster.Name.EscapeMarkup()}[/]").RuleStyle("yellow"));
+            AnsiConsole.WriteLine();
+
+            if (tracksToRemove.Any())
+            {
+                var panel = new Panel(
+                    $"[red]{tracksToRemove.Count} track(s) marked for removal[/]\n[dim]These tracks will be excluded from this cluster[/]")
+                    .Border(BoxBorder.Rounded)
+                    .BorderColor(Color.Red)
+                    .Header("[red bold]⚠️  Pending Changes[/]");
+
+                AnsiConsole.Write(panel);
+                AnsiConsole.WriteLine();
+            }
+
+            // Show instructions
+            AnsiConsole.MarkupLine("[cyan]Select tracks to remove from this cluster:[/]");
+            AnsiConsole.MarkupLine("[dim]Tip: You can select multiple tracks. Press [green]Enter[/] with no selection when done.[/]");
+            AnsiConsole.WriteLine();
+
+            var trackChoices = sorted
+                .Select(t => $"{t.TrackName.EscapeMarkup()} - {t.ArtistName.EscapeMarkup()} ({t.FormattedDuration})")
+                .ToList();
+
+            trackChoices.Add("← Done - Save changes");
+            trackChoices.Add("← Cancel - Discard changes");
+
+            var selection = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("[yellow]Select a track to remove (or choose an option):[/]")
+                    .PageSize(15)
+                    .AddChoices(trackChoices)
+            );
+
+            if (selection == "← Done - Save changes")
+            {
+                if (!tracksToRemove.Any())
+                {
+                    AnsiConsole.MarkupLine("[yellow]No tracks selected for removal.[/]");
+                    AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+                    Console.ReadKey(intercept: true);
+                    return;
+                }
+
+                // Confirm removal
+                AnsiConsole.WriteLine();
+                var confirm = AnsiConsole.Confirm(
+                    $"[red]Exclude {tracksToRemove.Count} track(s) from '{cluster.Name.EscapeMarkup()}'?[/]",
+                    true
+                );
+
+                if (confirm)
+                {
+                    try
+                    {
+                        // Add track exclusions
+                        foreach (var track in tracksToRemove)
+                        {
+                            await _analyticsService.ExcludeTrackAsync(clusterId, track.TrackId);
+                        }
+
+                        await _analyticsService.SaveChangesAsync();
+
+                        AnsiConsole.MarkupLine($"[green]✓ {tracksToRemove.Count} track(s) excluded successfully![/]");
+                        AnsiConsole.MarkupLine("[dim]These tracks will no longer appear in this cluster[/]");
+                    }
+                    catch (Exception ex)
+                    {
+                        AnsiConsole.MarkupLine($"[red]❌ Error excluding tracks: {ex.Message.EscapeMarkup()}[/]");
+                        _logger.LogError(ex, "Failed to exclude tracks from cluster '{ClusterName}'", cluster.Name);
+                    }
+
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine("[dim]Press any key to continue...[/]");
+                    Console.ReadKey(intercept: true);
+                    return;
+                }
+                else
+                {
+                    // Continue editing
+                    continue;
+                }
+            }
+            else if (selection == "← Cancel - Discard changes")
+            {
+                if (tracksToRemove.Any())
+                {
+                    var confirmCancel = AnsiConsole.Confirm(
+                        "[yellow]Discard all changes and exit?[/]",
+                        false
+                    );
+
+                    if (confirmCancel)
+                    {
+                        AnsiConsole.MarkupLine("[yellow]Changes discarded.[/]");
+                        AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+                        Console.ReadKey(intercept: true);
+                        return;
+                    }
+                }
+                else
+                {
+                    return; // Nothing to discard, just exit
+                }
+            }
+            else
+            {
+                // Find the selected track
+                var selectedIndex = trackChoices.IndexOf(selection);
+                if (selectedIndex >= 0 && selectedIndex < sorted.Count)
+                {
+                    var selectedTrack = sorted[selectedIndex];
+
+                    // Toggle selection
+                    if (tracksToRemove.Contains(selectedTrack))
+                    {
+                        tracksToRemove.Remove(selectedTrack);
+                        AnsiConsole.MarkupLine($"[yellow]Unmarked:[/] {selectedTrack.TrackName.EscapeMarkup()}");
+                    }
+                    else
+                    {
+                        tracksToRemove.Add(selectedTrack);
+                        AnsiConsole.MarkupLine($"[red]Marked for removal:[/] {selectedTrack.TrackName.EscapeMarkup()}");
+                    }
+
+                    Thread.Sleep(500); // Brief pause to show feedback
+                }
+            }
+        }
     }
 
     private async Task ShowTrackDetailAsync()

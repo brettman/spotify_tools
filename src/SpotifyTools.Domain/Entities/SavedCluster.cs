@@ -51,6 +51,16 @@ public class SavedCluster
     public bool IsFinalized { get; set; }
 
     /// <summary>
+    /// The Spotify playlist ID if a playlist has been created from this cluster
+    /// </summary>
+    public string? SpotifyPlaylistId { get; set; }
+
+    /// <summary>
+    /// When the Spotify playlist was created
+    /// </summary>
+    public DateTime? PlaylistCreatedAt { get; set; }
+
+    /// <summary>
     /// Helper to get genres as a list
     /// </summary>
     public List<string> GetGenresList()

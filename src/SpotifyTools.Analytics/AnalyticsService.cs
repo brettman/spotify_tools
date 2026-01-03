@@ -760,6 +760,14 @@ public class AnalyticsService : IAnalyticsService
 
             var matchingTracks = tracks.Where(t => matchingTrackIds.Contains(t.Id)).ToList();
 
+            // Filter out excluded tracks if this is a saved cluster
+            HashSet<string> excludedTrackIds = new();
+            if (!string.IsNullOrEmpty(cluster.Id) && int.TryParse(cluster.Id, out int clusterId))
+            {
+                excludedTrackIds = await _unitOfWork.TrackExclusions.GetExcludedTrackIdsAsync(clusterId);
+                matchingTracks = matchingTracks.Where(t => !excludedTrackIds.Contains(t.Id)).ToList();
+            }
+
             // Build track info list
             foreach (var track in matchingTracks)
             {
@@ -999,6 +1007,153 @@ public class AnalyticsService : IAnalyticsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error finalizing cluster {Id}", id);
+            throw;
+        }
+    }
+
+    public async Task ExcludeTrackAsync(int clusterId, string trackId)
+    {
+        try
+        {
+            await _unitOfWork.TrackExclusions.AddExclusionAsync(clusterId, trackId);
+            _logger.LogInformation("Excluded track {TrackId} from cluster {ClusterId}", trackId, clusterId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error excluding track {TrackId} from cluster {ClusterId}", trackId, clusterId);
+            throw;
+        }
+    }
+
+    public async Task IncludeTrackAsync(int clusterId, string trackId)
+    {
+        try
+        {
+            await _unitOfWork.TrackExclusions.RemoveExclusionAsync(clusterId, trackId);
+            _logger.LogInformation("Included track {TrackId} back into cluster {ClusterId}", trackId, clusterId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error including track {TrackId} into cluster {ClusterId}", trackId, clusterId);
+            throw;
+        }
+    }
+
+    public async Task<HashSet<string>> GetExcludedTrackIdsAsync(int clusterId)
+    {
+        try
+        {
+            return await _unitOfWork.TrackExclusions.GetExcludedTrackIdsAsync(clusterId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting excluded track IDs for cluster {ClusterId}", clusterId);
+            throw;
+        }
+    }
+
+    public async Task<int> SaveChangesAsync()
+    {
+        return await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task<string> CreatePlaylistFromClusterAsync(int clusterId, bool makePublic = false)
+    {
+        try
+        {
+            // Load the cluster
+            var savedCluster = await _unitOfWork.SavedClusters.GetByIdAsync(clusterId);
+            if (savedCluster == null)
+            {
+                throw new InvalidOperationException($"Cluster {clusterId} not found.");
+            }
+
+            // Check if playlist already exists
+            if (!string.IsNullOrEmpty(savedCluster.SpotifyPlaylistId))
+            {
+                _logger.LogWarning("Cluster {ClusterId} already has a playlist: {PlaylistId}",
+                    clusterId, savedCluster.SpotifyPlaylistId);
+                return savedCluster.SpotifyPlaylistId;
+            }
+
+            // Ensure client is authenticated
+            if (!_spotifyClient.IsAuthenticated)
+            {
+                _logger.LogInformation("Spotify client not authenticated. Initiating authentication...");
+                await _spotifyClient.AuthenticateAsync();
+            }
+
+            if (_spotifyClient.Client == null)
+            {
+                throw new InvalidOperationException("Spotify client failed to initialize.");
+            }
+
+            if (string.IsNullOrEmpty(_spotifyClient.UserId))
+            {
+                throw new InvalidOperationException("User ID is not available after authentication.");
+            }
+
+            // Get the cluster with track info
+            var tracks = await _unitOfWork.Tracks.GetAllAsync();
+            var artists = await _unitOfWork.Artists.GetAllAsync();
+            var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
+
+            var genreCluster = await ConvertToGenreClusterAsync(savedCluster, tracks, artists, trackArtists);
+            var report = await GetClusterPlaylistReportAsync(genreCluster);
+
+            if (!report.Tracks.Any())
+            {
+                throw new InvalidOperationException($"Cluster '{savedCluster.Name}' has no tracks.");
+            }
+
+            _logger.LogInformation("Creating Spotify playlist for cluster '{ClusterName}' with {TrackCount} tracks",
+                savedCluster.Name, report.Tracks.Count);
+
+            // Create the playlist
+            var playlistRequest = new SpotifyAPI.Web.PlaylistCreateRequest(savedCluster.Name)
+            {
+                Public = makePublic,
+                Description = savedCluster.Description ?? $"Generated from genre cluster: {string.Join(", ", savedCluster.GetGenresList().Take(5))}"
+            };
+
+            var playlist = await _spotifyClient.Client.Playlists.Create(_spotifyClient.UserId, playlistRequest);
+
+            _logger.LogInformation("Created Spotify playlist: {PlaylistId} ({PlaylistName})",
+                playlist.Id, playlist.Name);
+
+            // Add tracks to playlist (Spotify API limit is 100 tracks per request)
+            var trackUris = report.Tracks
+                .Select(t => $"spotify:track:{t.TrackId}")
+                .ToList();
+
+            const int batchSize = 100;
+            for (int i = 0; i < trackUris.Count; i += batchSize)
+            {
+                var batch = trackUris.Skip(i).Take(batchSize).ToList();
+                var addRequest = new SpotifyAPI.Web.PlaylistAddItemsRequest(batch);
+
+                await _spotifyClient.Client.Playlists.AddItems(playlist.Id!, addRequest);
+
+                _logger.LogInformation("Added {Count} tracks to playlist (batch {BatchNum}/{TotalBatches})",
+                    batch.Count, (i / batchSize) + 1, (int)Math.Ceiling(trackUris.Count / (double)batchSize));
+            }
+
+            // Update the saved cluster with playlist info
+            savedCluster.SpotifyPlaylistId = playlist.Id;
+            savedCluster.PlaylistCreatedAt = DateTime.UtcNow;
+            savedCluster.UpdatedAt = DateTime.UtcNow;
+
+            _unitOfWork.SavedClusters.Update(savedCluster);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Successfully created playlist '{PlaylistName}' with {TrackCount} tracks",
+                playlist.Name, trackUris.Count);
+
+            return playlist.Id!;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating playlist from cluster {ClusterId}", clusterId);
             throw;
         }
     }

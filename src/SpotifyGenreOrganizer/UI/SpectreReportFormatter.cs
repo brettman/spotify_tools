@@ -450,6 +450,71 @@ public static class SpectreReportFormatter
     }
 
     /// <summary>
+    /// Renders a paginated table of tracks
+    /// </summary>
+    public static void RenderTracksTablePage(List<ClusterPlaylistReport.TrackInfo> allTracks, int page, int pageSize, out int totalPages, string? title = null)
+    {
+        if (!allTracks.Any())
+        {
+            AnsiConsole.MarkupLine("[yellow]No tracks found.[/]");
+            totalPages = 0;
+            return;
+        }
+
+        // Sort by artist, then track name for better browsing
+        var sorted = allTracks
+            .OrderBy(t => t.ArtistName)
+            .ThenBy(t => t.TrackName)
+            .ToList();
+
+        totalPages = (int)Math.Ceiling(sorted.Count / (double)pageSize);
+
+        // Clamp page to valid range
+        page = Math.Max(1, Math.Min(page, totalPages));
+
+        var startIndex = (page - 1) * pageSize;
+        var pageItems = sorted.Skip(startIndex).Take(pageSize).ToList();
+
+        var tableTitle = title ?? $"[green bold]🎵 Tracks - Page {page}/{totalPages}[/] [dim]({sorted.Count} total)[/]";
+
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Green)
+            .Title(tableTitle)
+            .AddColumn(new TableColumn("[cyan]#[/]").RightAligned())
+            .AddColumn(new TableColumn("[green]Track[/]").LeftAligned())
+            .AddColumn(new TableColumn("[yellow]Artist[/]").LeftAligned())
+            .AddColumn(new TableColumn("[blue]Album[/]").LeftAligned())
+            .AddColumn(new TableColumn("[magenta]Duration[/]").RightAligned())
+            .AddColumn(new TableColumn("[cyan]Matched Genres[/]").LeftAligned());
+
+        int rowNum = 1;
+        foreach (var track in pageItems)
+        {
+            var genresDisplay = track.MatchedGenres.Any()
+                ? string.Join(", ", track.MatchedGenres.Take(2)).EscapeMarkup()
+                : "[dim]none[/]";
+
+            if (track.MatchedGenres.Count > 2)
+            {
+                genresDisplay += $" [dim](+{track.MatchedGenres.Count - 2})[/]";
+            }
+
+            table.AddRow(
+                rowNum.ToString(),
+                track.TrackName.EscapeMarkup(),
+                track.ArtistName.EscapeMarkup(),
+                (track.AlbumName ?? "[dim]unknown[/]").EscapeMarkup(),
+                track.FormattedDuration,
+                genresDisplay
+            );
+            rowNum++;
+        }
+
+        AnsiConsole.Write(table);
+    }
+
+    /// <summary>
     /// Renders a comprehensive genre analysis report
     /// </summary>
     public static void RenderGenreAnalysisReport(GenreAnalysisReport report)

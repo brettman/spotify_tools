@@ -136,4 +136,39 @@ public interface IAnalyticsService
     /// <param name="id">The cluster ID</param>
     /// <returns>True if finalized successfully</returns>
     Task<bool> FinalizeClusterAsync(int id);
+
+    /// <summary>
+    /// Exclude a track from a cluster
+    /// </summary>
+    /// <param name="clusterId">The cluster ID</param>
+    /// <param name="trackId">The track ID to exclude</param>
+    Task ExcludeTrackAsync(int clusterId, string trackId);
+
+    /// <summary>
+    /// Include a previously excluded track back into a cluster
+    /// </summary>
+    /// <param name="clusterId">The cluster ID</param>
+    /// <param name="trackId">The track ID to include</param>
+    Task IncludeTrackAsync(int clusterId, string trackId);
+
+    /// <summary>
+    /// Get all excluded track IDs for a cluster
+    /// </summary>
+    /// <param name="clusterId">The cluster ID</param>
+    /// <returns>Set of excluded track IDs</returns>
+    Task<HashSet<string>> GetExcludedTrackIdsAsync(int clusterId);
+
+    /// <summary>
+    /// Save all pending changes to the database
+    /// </summary>
+    /// <returns>Number of entities written to the database</returns>
+    Task<int> SaveChangesAsync();
+
+    /// <summary>
+    /// Creates a Spotify playlist from a finalized cluster
+    /// </summary>
+    /// <param name="clusterId">The cluster ID to create a playlist from</param>
+    /// <param name="makePublic">Whether the playlist should be public (default: false)</param>
+    /// <returns>The Spotify playlist ID if successful</returns>
+    Task<string> CreatePlaylistFromClusterAsync(int clusterId, bool makePublic = false);
 }

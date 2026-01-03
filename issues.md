@@ -65,4 +65,35 @@ var clusterChoices = savedClusters
 
 ---
 
+### 4. Track Browsing - Row Selection Not Visually Clear
+**Severity:** Minor (UX/Clarity)
+**Component:** Track Viewing UI
+**Description:** When browsing tracks in a saved cluster, the option to select a row (by typing 1-30) is not visually distinct from the letter-based commands. The current format `[N]ext [P]rev [J]ump [1-30] Select row [E]dit mode [B]ack` makes it hard to understand that you can select a row by number.
+
+**Current Format:**
+```
+[cyan]Options:[/] [green][[N]]ext[/] [green][[P]]rev[/] [yellow][[J]]ump[/] [yellow][[1-30]][/] Select row [cyan][[E]]dit mode[/] [dim][[B]]ack[/]
+```
+
+**Expected Behavior:** Make the row selection option more prominent and separated from letter-based navigation commands.
+
+**Location:** `CliMenuService.cs` - `ViewClusterTracksAsync()` method, line ~1198
+
+**Suggested Fix Options:**
+1. Put row selection first: `[1-30] Select row | [N]ext [P]rev [J]ump [E]dit [B]ack`
+2. Use different formatting: `Type [green bold]1-30[/] to select track | [N]ext [P]rev [J]ump [E]dit [B]ack`
+3. Add separator with distinct color: `[yellow bold][[1-30]] Select row[/] | [green][[N]]ext[/] ...`
+4. Break into two lines:
+   ```
+   Navigation: [N]ext [P]rev [J]ump [E]dit [B]ack
+   Select track: Type 1-30
+   ```
+
+**Implementation Notes:**
+- Same issue may exist in other paginated views (artists, playlists)
+- Consider standardizing navigation prompts across all paginated views
+- Could also apply to the artist browsing view for consistency
+
+---
+
 *Last Updated: 2026-01-03*
