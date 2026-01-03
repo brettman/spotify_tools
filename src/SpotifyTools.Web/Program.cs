@@ -5,11 +5,14 @@ using SpotifyTools.Data.DbContext;
 using SpotifyTools.Data.Repositories.Implementations;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Sync;
+using SpotifyTools.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddControllers();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 
 // Configure Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -41,6 +44,12 @@ builder.Services.AddScoped<ISyncService, SyncService>();
 // Analytics service
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
+// API Client Service for Blazor
+builder.Services.AddHttpClient<ApiClientService>(client =>
+{
+    client.BaseAddress = new Uri("http://localhost:5241/");  // Self-reference
+});
+
 // CORS (for future frontend clients)
 builder.Services.AddCors(options =>
 {
@@ -61,13 +70,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "Spotify Tools API v1");
-        options.RoutePrefix = string.Empty; // Serve Swagger UI at root
+        options.RoutePrefix = "swagger"; // Swagger at /swagger
     });
 }
 
 app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthorization();
+app.UseStaticFiles();
+app.UseAntiforgery();
+
 app.MapControllers();
+app.MapRazorComponents<SpotifyTools.Web.Components.App>()
+    .AddInteractiveServerRenderMode();
 
 app.Run();
