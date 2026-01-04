@@ -152,24 +152,83 @@
                         </div>
                     </div>
                     <div class="card-body p-0">
-                        <div class="list-group list-group-flush" style="max-height: 70vh; overflow-y: auto;">
-                            @foreach (var playlist in playlists)
-                            {
-                                <button class="list-group-item list-group-item-action"
-                                        @onclick="() => SelectPlaylist(playlist.Id)">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <strong>@playlist.Name</strong>
-                                            @if (!string.IsNullOrEmpty(playlist.Description))
-                                            {
-                                                <div class="small text-muted">@playlist.Description</div>
-                                            }
-                                        </div>
-                                        <span class="badge bg-secondary rounded-pill">@playlist.TrackCount</span>
+                        @if (selectedPlaylist != null)
+                        {
+                            <!-- Playlist Detail View -->
+                            <div class="p-3 border-bottom">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">@selectedPlaylist.Name</h6>
+                                        @if (!string.IsNullOrEmpty(selectedPlaylist.Description))
+                                        {
+                                            <small class="text-muted">@selectedPlaylist.Description</small>
+                                        }
                                     </div>
-                                </button>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearSelectedPlaylist">
+                                        ✕
+                                    </button>
+                                </div>
+                                <div class="text-muted small">
+                                    <div>@playlistTracks.Count tracks</div>
+                                    <div>@FormatTotalDuration(playlistTracks.Sum(t => t.DurationMs))</div>
+                                </div>
+                            </div>
+                            
+                            @if (loadingPlaylist)
+                            {
+                                <div class="text-center p-4">
+                                    <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                                    <p class="small mt-2">Loading tracks...</p>
+                                </div>
                             }
-                        </div>
+                            else if (playlistTracks.Any())
+                            {
+                                <div style="max-height: 50vh; overflow-y: auto;">
+                                    @foreach (var track in playlistTracks)
+                                    {
+                                        <div class="list-group-item list-group-item-action small">
+                                            <div class="d-flex justify-content-between">
+                                                <div class="flex-grow-1 text-truncate">
+                                                    <div class="fw-bold text-truncate">@track.Name</div>
+                                                    <div class="text-muted text-truncate">
+                                                        @string.Join(", ", track.Artists.Select(a => a.Name))
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted ms-2">@FormatDuration(track.DurationMs)</small>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-3 text-center text-muted small">
+                                    This playlist is empty
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <!-- Playlist List View -->
+                            <div class="list-group list-group-flush" style="max-height: 70vh; overflow-y: auto;">
+                                @foreach (var playlist in playlists)
+                                {
+                                    <button class="list-group-item list-group-item-action"
+                                            @onclick="() => SelectPlaylist(playlist.Id)">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div class="flex-grow-1">
+                                                <strong>@playlist.Name</strong>
+                                                @if (!string.IsNullOrEmpty(playlist.Description))
+                                                {
+                                                    <div class="small text-muted text-truncate">@playlist.Description</div>
+                                                }
+                                            </div>
+                                            <span class="badge bg-secondary rounded-pill">@playlist.TrackCount</span>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -181,10 +240,13 @@
     private List<GenreDto> genres = new();
     private List<TrackDto> tracks = new();
     private List<PlaylistDto> playlists = new();
+    private PlaylistDetailDto? selectedPlaylist;
+    private List<TrackDto> playlistTracks = new();
     private HashSet<string> selectedTracks = new();
     private string? selectedGenre;
     private bool isLoading = true;
     private bool loadingTracks = false;
+    private bool loadingPlaylist = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -251,7 +313,41 @@
 
     private async Task SelectPlaylist(string playlistId)
     {
-        await JS.InvokeVoidAsync("alert", $"Playlist details coming soon! ID: {playlistId}");
+        Console.WriteLine($"SelectPlaylist called with: {playlistId}");
+        loadingPlaylist = true;
+        
+        try
+        {
+            Console.WriteLine($"Fetching playlist details for: {playlistId}");
+            selectedPlaylist = await ApiClient.GetPlaylistByIdAsync(playlistId);
+            playlistTracks = selectedPlaylist?.Tracks ?? new List<TrackDto>();
+            Console.WriteLine($"Loaded playlist with {playlistTracks.Count} tracks");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading playlist: {ex.Message}");
+        }
+        finally
+        {
+            loadingPlaylist = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearSelectedPlaylist()
+    {
+        selectedPlaylist = null;
+        playlistTracks.Clear();
+    }
+
+    private string FormatTotalDuration(int totalMs)
+    {
+        var duration = TimeSpan.FromMilliseconds(totalMs);
+        if (duration.TotalHours >= 1)
+        {
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+        }
+        return $"{(int)duration.TotalMinutes}m {duration.Seconds}s";
     }
 
     private async Task ShowCreatePlaylistModal()
