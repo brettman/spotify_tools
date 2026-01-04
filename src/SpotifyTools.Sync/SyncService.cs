@@ -778,6 +778,7 @@ public class SyncService : ISyncService
 
         var offset = 0;
         const int limit = 100;
+        var globalPosition = 0; // Track actual position across all pages
 
         while (true)
         {
@@ -794,33 +795,130 @@ public class SyncService : ISyncService
             {
                 if (item.Track is FullTrack fullTrack)
                 {
-                    // Check if track exists in database
+                    // Check if track exists in database, if not sync it
                     var trackExists = await _unitOfWork.Tracks.GetByIdAsync(fullTrack.Id);
                     if (trackExists == null)
                     {
-                        // Track is in playlist but not in saved library - log it
-                        _missingPlaylistTrackIds.Add(fullTrack.Id);
-                        _logger.LogDebug("Track {TrackId} ({TrackName}) in playlist {PlaylistId} not found in saved library",
+                        // Track is in playlist but not in saved library - sync it now
+                        _logger.LogDebug("Track {TrackId} ({TrackName}) in playlist {PlaylistId} not in saved library, syncing now",
                             fullTrack.Id, fullTrack.Name, playlistId);
-                        continue;
+
+                        // Sync the track
+                        var track = new Track
+                        {
+                            Id = fullTrack.Id,
+                            Name = fullTrack.Name,
+                            DurationMs = fullTrack.DurationMs,
+                            Explicit = fullTrack.Explicit,
+                            Popularity = fullTrack.Popularity,
+                            Isrc = fullTrack.ExternalIds?.ContainsKey("isrc") == true
+                                ? fullTrack.ExternalIds["isrc"]
+                                : null,
+                            AddedAt = DateTime.UtcNow, // Playlist tracks don't have individual AddedAt for library
+                            FirstSyncedAt = DateTime.UtcNow,
+                            LastSyncedAt = DateTime.UtcNow
+                        };
+
+                        await _unitOfWork.Tracks.AddAsync(track);
+
+                        // Also sync artists for this track
+                        var now = DateTime.UtcNow;
+                        var artistPosition = 0;
+                        foreach (var artist in fullTrack.Artists)
+                        {
+                            // Create stub artist if doesn't exist
+                            var existingArtist = await _unitOfWork.Artists.GetByIdAsync(artist.Id);
+                            if (existingArtist == null)
+                            {
+                                var stubArtist = new Artist
+                                {
+                                    Id = artist.Id,
+                                    Name = artist.Name,
+                                    Genres = Array.Empty<string>(),
+                                    Popularity = 0,
+                                    Followers = 0,
+                                    FirstSyncedAt = now,
+                                    LastSyncedAt = now
+                                };
+                                await _unitOfWork.Artists.AddAsync(stubArtist);
+                            }
+
+                            // Create track-artist relationship
+                            var trackArtist = new TrackArtist
+                            {
+                                TrackId = fullTrack.Id,
+                                ArtistId = artist.Id,
+                                Position = artistPosition++
+                            };
+
+                            var existingRelation = (await _unitOfWork.TrackArtists.GetAllAsync())
+                                .FirstOrDefault(ta => ta.TrackId == fullTrack.Id && ta.ArtistId == artist.Id);
+
+                            if (existingRelation == null)
+                            {
+                                await _unitOfWork.TrackArtists.AddAsync(trackArtist);
+                            }
+                        }
+
+                        // Also sync album for this track
+                        if (fullTrack.Album != null)
+                        {
+                            var existingAlbum = await _unitOfWork.Albums.GetByIdAsync(fullTrack.Album.Id);
+                            if (existingAlbum == null)
+                            {
+                                var stubAlbum = new Album
+                                {
+                                    Id = fullTrack.Album.Id,
+                                    Name = fullTrack.Album.Name,
+                                    AlbumType = fullTrack.Album.AlbumType ?? "album",
+                                    ReleaseDate = ParseReleaseDate(fullTrack.Album.ReleaseDate),
+                                    TotalTracks = fullTrack.Album.TotalTracks,
+                                    Label = null,
+                                    ImageUrl = null,
+                                    FirstSyncedAt = now,
+                                    LastSyncedAt = now
+                                };
+                                await _unitOfWork.Albums.AddAsync(stubAlbum);
+                            }
+
+                            // Create track-album relationship
+                            var trackAlbum = new TrackAlbum
+                            {
+                                TrackId = fullTrack.Id,
+                                AlbumId = fullTrack.Album.Id,
+                                DiscNumber = fullTrack.DiscNumber,
+                                TrackNumber = fullTrack.TrackNumber
+                            };
+
+                            var existingAlbumRelation = (await _unitOfWork.TrackAlbums.GetAllAsync())
+                                .FirstOrDefault(ta => ta.TrackId == fullTrack.Id && ta.AlbumId == fullTrack.Album.Id);
+
+                            if (existingAlbumRelation == null)
+                            {
+                                await _unitOfWork.TrackAlbums.AddAsync(trackAlbum);
+                            }
+                        }
                     }
 
                     var playlistTrack = new PlaylistTrack
                     {
                         PlaylistId = playlistId,
                         TrackId = fullTrack.Id,
-                        Position = offset + playlistTracks.Items.IndexOf(item),
+                        Position = globalPosition, // Use global position counter, not offset-based calculation
                         AddedAt = item.AddedAt.HasValue
                             ? DateTime.SpecifyKind(item.AddedAt.Value, DateTimeKind.Utc)
-                            : DateTime.UtcNow
+                            : DateTime.UtcNow,
+                        AddedBy = item.AddedBy?.Id ?? "unknown"
                     };
 
                     await _unitOfWork.PlaylistTracks.AddAsync(playlistTrack);
+                    globalPosition++; // Increment position for each track
                 }
             }
 
             offset += limit;
 
+            // Check if we've retrieved all tracks
             if (offset >= playlistTracks.Total)
                 break;
         }
