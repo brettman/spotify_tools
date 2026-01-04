@@ -154,13 +154,16 @@ Then visit:
 - **http://localhost:5241/** - Web UI (three-panel interface)
 - **http://localhost:5241/swagger** - API documentation
 
+**Important:** If the UI doesn't respond to clicks, do a hard refresh (`Shift+Refresh` or `Cmd+Shift+R` on Mac) to clear browser cache and establish the Blazor WebSocket connection.
+
 ### Current Features (MVP)
 
 ✅ View all genres
-✅ Browse tracks by genre
+✅ Browse tracks by genre (click genre to load tracks)
 ✅ Multi-select tracks with checkboxes
 ✅ View all playlists  
 ✅ Loading states and spinners
+✅ Interactive Blazor Server with SignalR
 ⏳ Add tracks to playlist (coming next)
 ⏳ Create new playlists (coming next)
 ⏳ Drag & drop (future enhancement)
