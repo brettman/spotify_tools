@@ -212,14 +212,18 @@
 
     private async Task SelectGenre(string genreName)
     {
+        Console.WriteLine($"SelectGenre called with: {genreName}");
         selectedGenre = genreName;
         loadingTracks = true;
         selectedTracks.Clear();
+        StateHasChanged(); // Force UI update
         
         try
         {
+            Console.WriteLine($"Fetching tracks for genre: {genreName}");
             var result = await ApiClient.GetTracksByGenreAsync(genreName, page: 1, pageSize: 100);
             tracks = result.Items;
+            Console.WriteLine($"Loaded {tracks.Count} tracks");
         }
         catch (Exception ex)
         {
@@ -228,6 +232,7 @@
         finally
         {
             loadingTracks = false;
+            StateHasChanged(); // Force UI update
         }
     }
 
