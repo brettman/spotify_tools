@@ -27,6 +27,7 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
     public DbSet<AudioAnalysisSection> AudioAnalysisSections => Set<AudioAnalysisSection>();
     public DbSet<SavedCluster> SavedClusters => Set<SavedCluster>();
     public DbSet<TrackExclusion> TrackExclusions => Set<TrackExclusion>();
+    public DbSet<PlayHistory> PlayHistories => Set<PlayHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -283,6 +284,30 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.ExcludedAt);
+        });
+
+        // PlayHistory configuration
+        modelBuilder.Entity<PlayHistory>(entity =>
+        {
+            entity.ToTable("play_history");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasMaxLength(50);
+            entity.Property(e => e.TrackId).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ContextType).HasMaxLength(50);
+            entity.Property(e => e.ContextUri).HasMaxLength(200);
+
+            entity.HasOne(e => e.Track)
+                .WithMany(t => t.PlayHistories)
+                .HasForeignKey(e => e.TrackId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Composite index for efficient play count queries
+            entity.HasIndex(e => new { e.TrackId, e.PlayedAt });
+            // Index for time-range queries
+            entity.HasIndex(e => e.PlayedAt);
+            // Index for context-based queries
+            entity.HasIndex(e => e.ContextType);
         });
     }
 }

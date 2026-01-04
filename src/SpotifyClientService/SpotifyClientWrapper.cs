@@ -118,7 +118,8 @@ public class SpotifyClientWrapper : ISpotifyClientService
             {
                 Scopes.UserLibraryRead,
                 Scopes.PlaylistModifyPublic,
-                Scopes.PlaylistModifyPrivate
+                Scopes.PlaylistModifyPrivate,
+                Scopes.UserReadRecentlyPlayed
             }
         };
 

@@ -61,4 +61,5 @@ public class Track
     public ICollection<TrackArtist> TrackArtists { get; set; } = new List<TrackArtist>();
     public ICollection<TrackAlbum> TrackAlbums { get; set; } = new List<TrackAlbum>();
     public ICollection<PlaylistTrack> PlaylistTracks { get; set; } = new List<PlaylistTrack>();
+    public ICollection<PlayHistory> PlayHistories { get; set; } = new List<PlayHistory>();
 }

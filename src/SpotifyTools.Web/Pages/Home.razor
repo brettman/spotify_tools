@@ -1,4 +1,4 @@
-@page "/"
+@page "/library"
 @using SpotifyTools.Web.Services
 @using SpotifyTools.Web.DTOs
 @using Microsoft.JSInterop
@@ -8,13 +8,19 @@
 @inject IPlaylistService PlaylistService
 @inject IJSRuntime JS
 @inject ILogger<Home> Logger
+@inject NavigationManager Navigation
 
-<PageTitle>Playlist Manager</PageTitle>
+<PageTitle>Music Library</PageTitle>
 
 <div class="container-fluid">
     <div class="row mb-3">
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/start")'>
+                ← Back
+            </button>
+        </div>
         <div class="col">
-            <h1>🎵 Spotify Playlist Manager</h1>
+            <h1>🎵 Music Library</h1>
         </div>
         <div class="col-auto">
             <button class="btn btn-primary" @onclick="RefreshData">
@@ -67,7 +73,7 @@
                             <h5 class="mb-0">🎵 Tracks</h5>
                             @if (!string.IsNullOrEmpty(selectedGenre))
                             {
-                                <span class="badge bg-light text-dark">@selectedGenre (@tracks.Count tracks)</span>
+                                <span class="badge bg-light text-dark">@selectedGenre (@totalTrackCount tracks)</span>
                             }
                         </div>
                     </div>
@@ -122,7 +128,32 @@
                                     </div>
                                 }
                             </div>
-                            
+
+                            @* Pagination Controls *@
+                            @if (totalTrackCount > pageSize)
+                            {
+                                <div class="border-top p-3">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="text-muted small">
+                                            Showing @((currentPage - 1) * pageSize + 1)-@Math.Min(currentPage * pageSize, totalTrackCount) of @totalTrackCount
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-secondary me-2"
+                                                    @onclick="PreviousPage"
+                                                    disabled="@(currentPage <= 1 || loadingTracks)">
+                                                ← Previous
+                                            </button>
+                                            <span class="text-muted small">Page @currentPage of @totalPages</span>
+                                            <button class="btn btn-sm btn-outline-secondary ms-2"
+                                                    @onclick="NextPage"
+                                                    disabled="@(currentPage >= totalPages || loadingTracks)">
+                                                Next →
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
                             @if (selectedTracks.Any())
                             {
                                 <div class="card-footer bg-light">
@@ -250,6 +281,12 @@
     private bool loadingTracks = false;
     private bool loadingPlaylist = false;
 
+    // Pagination state
+    private int currentPage = 1;
+    private int pageSize = 100;
+    private int totalTrackCount = 0;
+    private int totalPages => totalTrackCount > 0 ? (int)Math.Ceiling((double)totalTrackCount / pageSize) : 0;
+
     protected override async Task OnInitializedAsync()
     {
         await RefreshData();
@@ -277,25 +314,54 @@
     private async Task SelectGenre(string genreName)
     {
         selectedGenre = genreName;
-        loadingTracks = true;
+        currentPage = 1;
         selectedTracks.Clear();
+        await LoadTracksPageAsync();
+    }
+
+    private async Task LoadTracksPageAsync()
+    {
+        if (string.IsNullOrEmpty(selectedGenre))
+            return;
+
+        loadingTracks = true;
         StateHasChanged();
 
         try
         {
             // Direct service call with efficient database query
-            var result = await GenreService.GetTracksByGenrePagedAsync(genreName, page: 1, pageSize: 100);
+            var result = await GenreService.GetTracksByGenrePagedAsync(selectedGenre, page: currentPage, pageSize: pageSize);
             tracks = result.Items;
-            Logger.LogInformation("Loaded {TrackCount} tracks for genre {Genre}", tracks.Count, genreName);
+            totalTrackCount = result.TotalCount;
+            Logger.LogInformation("Loaded page {Page} ({TrackCount} tracks) for genre {Genre}",
+                currentPage, tracks.Count, selectedGenre);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading tracks for genre {Genre}", genreName);
+            Logger.LogError(ex, "Error loading tracks for genre {Genre} page {Page}", selectedGenre, currentPage);
         }
         finally
         {
             loadingTracks = false;
             StateHasChanged();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadTracksPageAsync();
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadTracksPageAsync();
         }
     }
 

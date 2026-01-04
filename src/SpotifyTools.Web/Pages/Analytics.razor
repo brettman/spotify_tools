@@ -1,0 +1,470 @@
+@page "/analytics"
+@using SpotifyTools.Web.Services
+@using SpotifyTools.Web.DTOs
+
+@inject IListeningAnalyticsService AnalyticsService
+@inject NavigationManager Navigation
+@inject ILogger<Analytics> Logger
+
+<PageTitle>Listening Analytics</PageTitle>
+
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/start")'>
+                ← Back
+            </button>
+        </div>
+        <div class="col">
+            <h1>📊 Listening Analytics</h1>
+        </div>
+        <div class="col-auto">
+            <select class="form-select" @onchange="OnTimeRangeChanged">
+                <option value="@TimeRange.AllTime">All Time</option>
+                <option value="@TimeRange.Last7Days">Last 7 Days</option>
+                <option value="@TimeRange.Last30Days">Last 30 Days</option>
+                <option value="@TimeRange.Last90Days">Last 90 Days</option>
+                <option value="@TimeRange.ThisWeek">This Week</option>
+                <option value="@TimeRange.ThisMonth">This Month</option>
+                <option value="@TimeRange.ThisYear">This Year</option>
+            </select>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Loading analytics...</p>
+        </div>
+    }
+    else if (overallStats == null || overallStats.TotalPlays == 0)
+    {
+        <div class="alert alert-info">
+            <h4>No Listening Data Yet</h4>
+            <p>Start listening to music on Spotify! The background service will automatically track your plays every 10 minutes.</p>
+            <p class="mb-0"><small>Make sure you're authenticated and the playback tracking service is running.</small></p>
+        </div>
+    }
+    else
+    {
+        <!-- Overall Stats Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 opacity-75">Total Plays</h6>
+                        <h2 class="card-title mb-0">@overallStats.TotalPlays.ToString("N0")</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 opacity-75">Unique Tracks</h6>
+                        <h2 class="card-title mb-0">@overallStats.UniqueTracksPlayed.ToString("N0")</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 opacity-75">Unique Artists</h6>
+                        <h2 class="card-title mb-0">@overallStats.UniqueArtistsPlayed.ToString("N0")</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 opacity-75">Listening Time</h6>
+                        <h2 class="card-title mb-0">@FormatListeningTime(overallStats.TotalListeningTimeMs)</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Secondary Stats -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="text-muted">Days Tracked</h6>
+                        <h4>@overallStats.DaysTracked days</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="text-muted">Average Plays/Day</h6>
+                        <h4>@overallStats.AveragePlaysPerDay.ToString("F1")</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="text-muted">Tracking Period</h6>
+                        <h4>@(overallStats.FirstPlay?.ToString("MMM d") ?? "N/A") - @(overallStats.LastPlay?.ToString("MMM d") ?? "N/A")</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs for different analytics -->
+        <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "tracks" ? "active" : "")" @onclick='() => SetActiveTab("tracks")'>
+                    Top Tracks
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "artists" ? "active" : "")" @onclick='() => SetActiveTab("artists")'>
+                    Top Artists
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "genres" ? "active" : "")" @onclick='() => SetActiveTab("genres")'>
+                    Top Genres
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "patterns" ? "active" : "")" @onclick='() => SetActiveTab("patterns")'>
+                    Listening Patterns
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "recent" ? "active" : "")" @onclick='() => SetActiveTab("recent")'>
+                    Recent Activity
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content">
+            @if (activeTab == "tracks")
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Most Played Tracks</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (topTracks.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th width="50">#</th>
+                                            <th>Track</th>
+                                            <th>Artist(s)</th>
+                                            <th width="100">Plays</th>
+                                            <th width="150">Last Played</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var (track, index) in topTracks.Select((t, i) => (t, i)))
+                                        {
+                                            <tr>
+                                                <td class="text-muted">@(index + 1)</td>
+                                                <td><strong>@track.Name</strong></td>
+                                                <td class="text-muted">@track.Artists</td>
+                                                <td><span class="badge bg-primary">@track.PlayCount</span></td>
+                                                <td class="text-muted small">@track.LastPlayed.ToString("MMM d, h:mm tt")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-center text-muted p-4">No data available</p>
+                        }
+                    </div>
+                </div>
+            }
+            else if (activeTab == "artists")
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Most Played Artists</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (topArtists.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th width="50">#</th>
+                                            <th>Artist</th>
+                                            <th width="120">Plays</th>
+                                            <th width="120">Unique Tracks</th>
+                                            <th width="150">Last Played</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var (artist, index) in topArtists.Select((a, i) => (a, i)))
+                                        {
+                                            <tr>
+                                                <td class="text-muted">@(index + 1)</td>
+                                                <td><strong>@artist.Name</strong></td>
+                                                <td><span class="badge bg-primary">@artist.PlayCount</span></td>
+                                                <td class="text-muted">@artist.UniqueTrackCount tracks</td>
+                                                <td class="text-muted small">@artist.LastPlayed.ToString("MMM d, h:mm tt")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-center text-muted p-4">No data available</p>
+                        }
+                    </div>
+                </div>
+            }
+            else if (activeTab == "genres")
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Most Played Genres</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (topGenres.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th width="50">#</th>
+                                            <th>Genre</th>
+                                            <th width="120">Plays</th>
+                                            <th width="150">Unique Tracks</th>
+                                            <th width="150">Unique Artists</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var (genre, index) in topGenres.Select((g, i) => (g, i)))
+                                        {
+                                            <tr>
+                                                <td class="text-muted">@(index + 1)</td>
+                                                <td><strong>@genre.Genre</strong></td>
+                                                <td><span class="badge bg-primary">@genre.PlayCount</span></td>
+                                                <td class="text-muted">@genre.UniqueTrackCount tracks</td>
+                                                <td class="text-muted">@genre.UniqueArtistCount artists</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-center text-muted p-4">No data available</p>
+                        }
+                    </div>
+                </div>
+            }
+            else if (activeTab == "patterns")
+            {
+                <div class="row g-3">
+                    <!-- Plays by Hour -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Listening by Hour of Day</h5>
+                            </div>
+                            <div class="card-body">
+                                @if (playsByHour.Any())
+                                {
+                                    @foreach (var hour in playsByHour.OrderBy(h => h.Hour))
+                                    {
+                                        var percentage = overallStats.TotalPlays > 0
+                                            ? (hour.PlayCount * 100.0 / overallStats.TotalPlays)
+                                            : 0;
+                                        <div class="mb-2">
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <small>@hour.Hour:00 - @(hour.Hour):59</small>
+                                                <small class="text-muted">@hour.PlayCount plays</small>
+                                            </div>
+                                            <div class="progress" style="height: 20px;">
+                                                <div class="progress-bar bg-success"
+                                                     style="width: @(percentage)%">
+                                                    @if (percentage > 5) {<small>@percentage.ToString("F1")%</small>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="text-muted">No data available</p>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Plays by Day of Week -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Listening by Day of Week</h5>
+                            </div>
+                            <div class="card-body">
+                                @if (playsByDay.Any())
+                                {
+                                    @foreach (var day in playsByDay.OrderBy(d => d.DayOfWeek))
+                                    {
+                                        var percentage = overallStats.TotalPlays > 0
+                                            ? (day.PlayCount * 100.0 / overallStats.TotalPlays)
+                                            : 0;
+                                        <div class="mb-2">
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <small><strong>@day.DayName</strong></small>
+                                                <small class="text-muted">@day.PlayCount plays</small>
+                                            </div>
+                                            <div class="progress" style="height: 25px;">
+                                                <div class="progress-bar bg-info"
+                                                     style="width: @(percentage)%">
+                                                    @if (percentage > 5) {<small>@percentage.ToString("F1")%</small>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="text-muted">No data available</p>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (activeTab == "recent")
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Plays</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (recentPlays.Any())
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var play in recentPlays)
+                                {
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h6 class="mb-1">@play.TrackName</h6>
+                                                <p class="mb-1 text-muted small">@play.Artists</p>
+                                                @if (!string.IsNullOrEmpty(play.ContextType))
+                                                {
+                                                    <span class="badge bg-secondary">@play.ContextType</span>
+                                                }
+                                            </div>
+                                            <small class="text-muted">@play.PlayedAt.ToString("MMM d, h:mm tt")</small>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-center text-muted p-4">No recent plays</p>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private ListeningStatsDto? overallStats;
+    private List<TrackPlayCountDto> topTracks = new();
+    private List<ArtistPlayCountDto> topArtists = new();
+    private List<GenrePlayCountDto> topGenres = new();
+    private List<PlaysByHourDto> playsByHour = new();
+    private List<PlaysByDayOfWeekDto> playsByDay = new();
+    private List<RecentPlayDto> recentPlays = new();
+
+    private TimeRange selectedRange = TimeRange.AllTime;
+    private string activeTab = "tracks";
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAnalytics();
+    }
+
+    private async Task LoadAnalytics()
+    {
+        isLoading = true;
+        try
+        {
+            // Load all analytics data in parallel for better performance
+            var statsTask = AnalyticsService.GetOverallStatsAsync(selectedRange);
+            var tracksTask = AnalyticsService.GetMostPlayedTracksAsync(50, selectedRange);
+            var artistsTask = AnalyticsService.GetMostPlayedArtistsAsync(50, selectedRange);
+            var genresTask = AnalyticsService.GetMostPlayedGenresAsync(30, selectedRange);
+            var hourTask = AnalyticsService.GetPlaysByHourAsync(selectedRange);
+            var dayTask = AnalyticsService.GetPlaysByDayOfWeekAsync(selectedRange);
+            var recentTask = AnalyticsService.GetRecentPlaysAsync(50);
+
+            await Task.WhenAll(statsTask, tracksTask, artistsTask, genresTask, hourTask, dayTask, recentTask);
+
+            overallStats = await statsTask;
+            topTracks = await tracksTask;
+            topArtists = await artistsTask;
+            topGenres = await genresTask;
+            playsByHour = await hourTask;
+            playsByDay = await dayTask;
+            recentPlays = await recentTask;
+
+            Logger.LogInformation("Loaded analytics: {TotalPlays} plays, {UniqueTracksCount} unique tracks",
+                overallStats?.TotalPlays ?? 0, overallStats?.UniqueTracksPlayed ?? 0);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading analytics");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnTimeRangeChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<TimeRange>(e.Value?.ToString(), out var range))
+        {
+            selectedRange = range;
+            await LoadAnalytics();
+        }
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    private string FormatListeningTime(long milliseconds)
+    {
+        var timeSpan = TimeSpan.FromMilliseconds(milliseconds);
+
+        if (timeSpan.TotalDays >= 1)
+            return $"{(int)timeSpan.TotalDays}d {timeSpan.Hours}h";
+        if (timeSpan.TotalHours >= 1)
+            return $"{(int)timeSpan.TotalHours}h {timeSpan.Minutes}m";
+
+        return $"{(int)timeSpan.TotalMinutes}m";
+    }
+}

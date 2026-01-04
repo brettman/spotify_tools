@@ -47,6 +47,11 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 // Business logic services (Phase 1 refactoring)
 builder.Services.AddScoped<IGenreService, GenreService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<IPlayHistoryService, PlayHistoryService>();
+builder.Services.AddScoped<IListeningAnalyticsService, ListeningAnalyticsService>();
+
+// Background services
+builder.Services.AddHostedService<PlaybackTrackingService>();
 
 // API Client Service for Blazor (will be removed in Phase 1)
 // Keeping for now to maintain backwards compatibility during refactoring

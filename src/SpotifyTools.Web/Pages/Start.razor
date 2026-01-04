@@ -1,0 +1,88 @@
+@page "/start"
+@inject NavigationManager Navigation
+
+<PageTitle>Spotify Tools</PageTitle>
+
+<div class="container mt-5">
+    <div class="text-center mb-5">
+        <h1 class="display-4 mb-3">🎵 Spotify Tools</h1>
+        <p class="lead text-muted">Manage your music library and discover listening insights</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Library Browser Card -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm hover-card" @onclick='() => Navigation.NavigateTo("/library")' style="cursor: pointer;">
+                <div class="card-body text-center p-5">
+                    <div class="mb-4">
+                        <i class="bi bi-music-note-list" style="font-size: 4rem; color: #1DB954;"></i>
+                    </div>
+                    <h3 class="card-title mb-3">Music Library</h3>
+                    <p class="card-text text-muted">
+                        Browse your tracks by genre, create playlists, and manage your music collection
+                    </p>
+                    <button class="btn btn-success mt-3">
+                        Open Library →
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Card -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm hover-card" @onclick='() => Navigation.NavigateTo("/analytics")' style="cursor: pointer;">
+                <div class="card-body text-center p-5">
+                    <div class="mb-4">
+                        <i class="bi bi-graph-up" style="font-size: 4rem; color: #1DB954;"></i>
+                    </div>
+                    <h3 class="card-title mb-3">Listening Analytics</h3>
+                    <p class="card-text text-muted">
+                        Discover your listening patterns, top tracks, artists, and detailed statistics
+                    </p>
+                    <button class="btn btn-success mt-3">
+                        View Analytics →
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Additional Info -->
+    <div class="row mt-5">
+        <div class="col-md-12">
+            <div class="card bg-light border-0">
+                <div class="card-body">
+                    <h5 class="card-title">Features</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <strong>📊 Track Plays</strong>
+                            <p class="small text-muted">Automatically tracks your listening history every 10 minutes</p>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>🎯 Smart Filters</strong>
+                            <p class="small text-muted">Browse your library by genre with pagination support</p>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>📈 Insights</strong>
+                            <p class="small text-muted">Analyze your top tracks, artists, and listening patterns</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .hover-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .hover-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+</style>
+
+@code {
+}
