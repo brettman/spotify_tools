@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" Version="8.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.18" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SpotifyTools.Domain\SpotifyTools.Domain.csproj" />
+    <ProjectReference Include="..\SpotifyTools.Data\SpotifyTools.Data.csproj" />
+    <ProjectReference Include="..\SpotifyTools.Analytics\SpotifyTools.Analytics.csproj" />
+    <ProjectReference Include="..\SpotifyTools.Sync\SpotifyTools.Sync.csproj" />
+    <ProjectReference Include="..\SpotifyClientService\SpotifyClientService.csproj" />
+  </ItemGroup>
+
+</Project>

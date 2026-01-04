@@ -1,0 +1,368 @@
+@page "/"
+@using SpotifyTools.Web.Services
+@using SpotifyTools.Web.DTOs
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
+
+@inject ApiClientService ApiClient
+@inject IJSRuntime JS
+
+<PageTitle>Playlist Manager</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h1>🎵 Spotify Playlist Manager</h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="RefreshData">
+                <span class="@(isLoading ? "spinner-border spinner-border-sm" : "")"></span>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading && genres.Count == 0)
+    {
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Loading your library...</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            <!-- LEFT PANEL: Genre Filters -->
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">📂 Genres</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="list-group list-group-flush" style="max-height: 70vh; overflow-y: auto;">
+                            @foreach (var genre in genres)
+                            {
+                                <button class="list-group-item list-group-item-action @(selectedGenre == genre.Name ? "active" : "")"
+                                        @onclick="() => SelectGenre(genre.Name)">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>@genre.Name</span>
+                                        <span class="badge bg-secondary rounded-pill">@genre.TrackCount</span>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CENTER PANEL: Track List -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-success text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">🎵 Tracks</h5>
+                            @if (!string.IsNullOrEmpty(selectedGenre))
+                            {
+                                <span class="badge bg-light text-dark">@selectedGenre (@tracks.Count tracks)</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (loadingTracks)
+                        {
+                            <div class="text-center p-4">
+                                <div class="spinner-border text-success" role="status"></div>
+                            </div>
+                        }
+                        else if (tracks.Count == 0)
+                        {
+                            <div class="p-4 text-center text-muted">
+                                <p>Select a genre to view tracks</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="track-list" style="max-height: 70vh; overflow-y: auto;">
+                                @foreach (var track in tracks)
+                                {
+                                    <div class="list-group-item list-group-item-action @(selectedTracks.Contains(track.Id) ? "bg-light" : "")">
+                                        <div class="d-flex align-items-start">
+                                            <input type="checkbox" class="form-check-input me-3 mt-1"
+                                                   checked="@selectedTracks.Contains(track.Id)"
+                                                   @onchange="() => ToggleTrackSelection(track.Id)" />
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex justify-content-between">
+                                                    <strong>@track.Name</strong>
+                                                    <small class="text-muted">@FormatDuration(track.DurationMs)</small>
+                                                </div>
+                                                <div class="text-muted small">
+                                                    @string.Join(", ", track.Artists.Select(a => a.Name))
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(track.AlbumName))
+                                                {
+                                                    <div class="text-muted small">
+                                                        💿 @track.AlbumName
+                                                    </div>
+                                                }
+                                                @if (track.Genres.Any())
+                                                {
+                                                    <div class="mt-1">
+                                                        @foreach (var genre in track.Genres.Take(3))
+                                                        {
+                                                            <span class="badge bg-secondary me-1">@genre</span>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            
+                            @if (selectedTracks.Any())
+                            {
+                                <div class="card-footer bg-light">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>@selectedTracks.Count selected</span>
+                                        <div>
+                                            <button class="btn btn-sm btn-secondary me-2" @onclick="ClearSelection">Clear</button>
+                                            <button class="btn btn-sm btn-primary" @onclick="ShowAddToPlaylistModal">
+                                                Add to Playlist
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: Playlists -->
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-header bg-info text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">📋 Playlists</h5>
+                            <button class="btn btn-sm btn-light" @onclick="ShowCreatePlaylistModal">
+                                + New
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (selectedPlaylist != null)
+                        {
+                            <!-- Playlist Detail View -->
+                            <div class="p-3 border-bottom">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">@selectedPlaylist.Name</h6>
+                                        @if (!string.IsNullOrEmpty(selectedPlaylist.Description))
+                                        {
+                                            <small class="text-muted">@selectedPlaylist.Description</small>
+                                        }
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearSelectedPlaylist">
+                                        ✕
+                                    </button>
+                                </div>
+                                <div class="text-muted small">
+                                    <div>@playlistTracks.Count tracks</div>
+                                    <div>@FormatTotalDuration(playlistTracks.Sum(t => t.DurationMs))</div>
+                                </div>
+                            </div>
+                            
+                            @if (loadingPlaylist)
+                            {
+                                <div class="text-center p-4">
+                                    <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                                    <p class="small mt-2">Loading tracks...</p>
+                                </div>
+                            }
+                            else if (playlistTracks.Any())
+                            {
+                                <div style="max-height: 50vh; overflow-y: auto;">
+                                    @foreach (var track in playlistTracks)
+                                    {
+                                        <div class="list-group-item list-group-item-action small">
+                                            <div class="d-flex justify-content-between">
+                                                <div class="flex-grow-1 text-truncate">
+                                                    <div class="fw-bold text-truncate">@track.Name</div>
+                                                    <div class="text-muted text-truncate">
+                                                        @string.Join(", ", track.Artists.Select(a => a.Name))
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted ms-2">@FormatDuration(track.DurationMs)</small>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-3 text-center text-muted small">
+                                    This playlist is empty
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <!-- Playlist List View -->
+                            <div class="list-group list-group-flush" style="max-height: 70vh; overflow-y: auto;">
+                                @foreach (var playlist in playlists)
+                                {
+                                    <button class="list-group-item list-group-item-action"
+                                            @onclick="() => SelectPlaylist(playlist.Id)">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div class="flex-grow-1">
+                                                <strong>@playlist.Name</strong>
+                                                @if (!string.IsNullOrEmpty(playlist.Description))
+                                                {
+                                                    <div class="small text-muted text-truncate">@playlist.Description</div>
+                                                }
+                                            </div>
+                                            <span class="badge bg-secondary rounded-pill">@playlist.TrackCount</span>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<GenreDto> genres = new();
+    private List<TrackDto> tracks = new();
+    private List<PlaylistDto> playlists = new();
+    private PlaylistDetailDto? selectedPlaylist;
+    private List<TrackDto> playlistTracks = new();
+    private HashSet<string> selectedTracks = new();
+    private string? selectedGenre;
+    private bool isLoading = true;
+    private bool loadingTracks = false;
+    private bool loadingPlaylist = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshData();
+    }
+
+    private async Task RefreshData()
+    {
+        isLoading = true;
+        try
+        {
+            genres = await ApiClient.GetGenresAsync();
+            playlists = await ApiClient.GetPlaylistsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't show alert during prerender
+            Console.WriteLine($"Error loading data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SelectGenre(string genreName)
+    {
+        Console.WriteLine($"SelectGenre called with: {genreName}");
+        selectedGenre = genreName;
+        loadingTracks = true;
+        selectedTracks.Clear();
+        StateHasChanged(); // Force UI update
+        
+        try
+        {
+            Console.WriteLine($"Fetching tracks for genre: {genreName}");
+            var result = await ApiClient.GetTracksByGenreAsync(genreName, page: 1, pageSize: 100);
+            tracks = result.Items;
+            Console.WriteLine($"Loaded {tracks.Count} tracks");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading tracks: {ex.Message}");
+        }
+        finally
+        {
+            loadingTracks = false;
+            StateHasChanged(); // Force UI update
+        }
+    }
+
+    private void ToggleTrackSelection(string trackId)
+    {
+        if (selectedTracks.Contains(trackId))
+            selectedTracks.Remove(trackId);
+        else
+            selectedTracks.Add(trackId);
+    }
+
+    private void ClearSelection()
+    {
+        selectedTracks.Clear();
+    }
+
+    private async Task SelectPlaylist(string playlistId)
+    {
+        Console.WriteLine($"SelectPlaylist called with: {playlistId}");
+        loadingPlaylist = true;
+        
+        try
+        {
+            Console.WriteLine($"Fetching playlist details for: {playlistId}");
+            selectedPlaylist = await ApiClient.GetPlaylistByIdAsync(playlistId);
+            playlistTracks = selectedPlaylist?.Tracks ?? new List<TrackDto>();
+            Console.WriteLine($"Loaded playlist with {playlistTracks.Count} tracks");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading playlist: {ex.Message}");
+        }
+        finally
+        {
+            loadingPlaylist = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearSelectedPlaylist()
+    {
+        selectedPlaylist = null;
+        playlistTracks.Clear();
+    }
+
+    private string FormatTotalDuration(int totalMs)
+    {
+        var duration = TimeSpan.FromMilliseconds(totalMs);
+        if (duration.TotalHours >= 1)
+        {
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+        }
+        return $"{(int)duration.TotalMinutes}m {duration.Seconds}s";
+    }
+
+    private async Task ShowCreatePlaylistModal()
+    {
+        await JS.InvokeVoidAsync("alert", "Create playlist modal coming soon!");
+    }
+
+    private async Task ShowAddToPlaylistModal()
+    {
+        await JS.InvokeVoidAsync("alert", $"Add {selectedTracks.Count} tracks to playlist (coming soon!)");
+    }
+
+    private string FormatDuration(int durationMs)
+    {
+        var duration = TimeSpan.FromMilliseconds(durationMs);
+        return $"{(int)duration.TotalMinutes}:{duration.Seconds:D2}";
+    }
+}
