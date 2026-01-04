@@ -21,6 +21,10 @@ public class SyncService : ISyncService
 
     public event EventHandler<SyncProgressEventArgs>? ProgressChanged;
 
+    // Incremental sync configuration constants
+    private const int METADATA_REFRESH_DAYS = 7;
+    private const int FULL_SYNC_FALLBACK_DAYS = 30;
+
     public SyncService(
         ISpotifyClientService spotifyClient,
         IUnitOfWork unitOfWork,
@@ -122,8 +126,98 @@ public class SyncService : ISyncService
 
     public async Task<int> IncrementalSyncAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Incremental sync not yet implemented");
-        throw new NotImplementedException("Incremental sync will be implemented in Phase 2");
+        _logger.LogInformation("Starting incremental sync of Spotify library");
+
+        // Get last successful sync
+        var lastSync = await GetLastSyncDateAsync();
+
+        // Check if should fallback to full sync
+        if (ShouldUseFullSync(lastSync))
+        {
+            _logger.LogInformation("Falling back to full sync");
+            return await FullSyncAsync(cancellationToken);
+        }
+
+        // Create sync history record
+        var syncHistory = new SyncHistory
+        {
+            SyncType = SyncType.Incremental,
+            Status = SyncStatus.InProgress,
+            StartedAt = DateTime.UtcNow
+        };
+
+        await _unitOfWork.SyncHistory.AddAsync(syncHistory);
+        await _unitOfWork.SaveChangesAsync();
+
+        try
+        {
+            // Ensure authenticated
+            if (!_spotifyClient.IsAuthenticated)
+            {
+                await _spotifyClient.AuthenticateAsync();
+            }
+
+            var metadataThreshold = DateTime.UtcNow.AddDays(-METADATA_REFRESH_DAYS);
+            _logger.LogInformation("Metadata refresh threshold: {Threshold} ({Days} days ago)",
+                metadataThreshold, METADATA_REFRESH_DAYS);
+
+            // Sync new tracks
+            OnProgressChanged("Tracks", 0, 0, "Checking for new tracks...");
+            var tracksAdded = await IncrementalSyncTracksAsync(lastSync!.Value, cancellationToken);
+
+            // Sync artists (stubs + stale)
+            OnProgressChanged("Artists", 0, 0, "Syncing artist metadata...");
+            var (artistsAdded, artistsUpdated) = await IncrementalSyncArtistsAsync(metadataThreshold, cancellationToken);
+
+            // Sync albums (stubs + stale)
+            OnProgressChanged("Albums", 0, 0, "Syncing album metadata...");
+            var (albumsAdded, albumsUpdated) = await IncrementalSyncAlbumsAsync(metadataThreshold, cancellationToken);
+
+            // Sync audio features (new tracks only)
+            OnProgressChanged("Audio Features", 0, 0, "Processing audio features...");
+            var audioFeaturesProcessed = await SyncAudioFeaturesAsync(cancellationToken);
+
+            // Sync playlists (using SnapshotId)
+            OnProgressChanged("Playlists", 0, 0, "Checking playlists for changes...");
+            var (playlistsTotal, playlistsChanged) = await IncrementalSyncPlaylistsAsync(cancellationToken);
+
+            // Update sync history
+            syncHistory.Status = SyncStatus.Success;
+            syncHistory.CompletedAt = DateTime.UtcNow;
+            syncHistory.TracksAdded = tracksAdded;
+            syncHistory.TracksUpdated = 0; // Incremental sync doesn't track track updates separately
+            syncHistory.ArtistsAdded = artistsAdded;
+            syncHistory.AlbumsAdded = albumsAdded;
+            syncHistory.PlaylistsSynced = playlistsChanged; // Only count changed playlists
+            syncHistory.ErrorMessage = null;
+
+            _unitOfWork.SyncHistory.Update(syncHistory);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Incremental sync completed successfully. New Tracks: {Tracks}, Artists: {Artists} ({ArtistsUpdated} updated), " +
+                "Albums: {Albums} ({AlbumsUpdated} updated), Audio Features: {AudioFeatures}, " +
+                "Playlists: {PlaylistsChanged}/{PlaylistsTotal} changed",
+                tracksAdded, artistsAdded, artistsUpdated, albumsAdded, albumsUpdated,
+                audioFeaturesProcessed, playlistsChanged, playlistsTotal);
+
+            OnProgressChanged("Complete", 1, 1, "Incremental sync completed successfully!");
+
+            return syncHistory.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Incremental sync failed");
+
+            syncHistory.Status = SyncStatus.Failed;
+            syncHistory.CompletedAt = DateTime.UtcNow;
+            syncHistory.ErrorMessage = ex.Message;
+
+            _unitOfWork.SyncHistory.Update(syncHistory);
+            await _unitOfWork.SaveChangesAsync();
+
+            throw;
+        }
     }
 
     public async Task<DateTime?> GetLastSyncDateAsync()
@@ -135,6 +229,31 @@ public class SyncService : ISyncService
             .OrderByDescending(s => s.CompletedAt)
             .FirstOrDefault()
             ?.CompletedAt;
+    }
+
+    /// <summary>
+    /// Determines if a full sync should be used instead of incremental
+    /// </summary>
+    /// <param name="lastSync">The date of the last successful sync</param>
+    /// <returns>True if full sync should be used, false if incremental sync is appropriate</returns>
+    private bool ShouldUseFullSync(DateTime? lastSync)
+    {
+        // No previous sync exists - must do full sync
+        if (lastSync == null)
+            return true;
+
+        // Last sync was more than 30 days ago - fallback to full sync
+        var daysSinceLastSync = (DateTime.UtcNow - lastSync.Value).TotalDays;
+        if (daysSinceLastSync > FULL_SYNC_FALLBACK_DAYS)
+        {
+            _logger.LogInformation(
+                "Last sync was {Days:F1} days ago (> {Threshold} days). Falling back to full sync.",
+                daysSinceLastSync, FULL_SYNC_FALLBACK_DAYS);
+            return true;
+        }
+
+        // Recent sync exists - use incremental
+        return false;
     }
 
     public async Task<int> SyncTracksOnlyAsync(CancellationToken cancellationToken = default)
@@ -392,6 +511,170 @@ public class SyncService : ISyncService
         return tracksProcessed;
     }
 
+    /// <summary>
+    /// Incrementally syncs only tracks added since the last sync date
+    /// </summary>
+    private async Task<int> IncrementalSyncTracksAsync(DateTime lastSyncDate, CancellationToken cancellationToken)
+    {
+        var newTracksAdded = 0;
+        var offset = 0;
+        const int limit = 50; // Spotify API max per request
+        var now = DateTime.UtcNow;
+
+        _logger.LogInformation("Checking for tracks added after {LastSync}", lastSyncDate);
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _rateLimiter.WaitAsync();
+
+            var savedTracks = await ExecuteWithRetryAsync(
+                () => _spotifyClient.Client.Library.GetTracks(
+                    new LibraryTracksRequest { Limit = limit, Offset = offset }),
+                $"Library tracks (offset {offset})");
+
+            if (savedTracks.Items == null || savedTracks.Items.Count == 0)
+                break;
+
+            foreach (var savedTrack in savedTracks.Items)
+            {
+                if (savedTrack.Track == null) continue;
+
+                // Filter: only process tracks added after last sync
+                var addedAt = DateTime.SpecifyKind(savedTrack.AddedAt, DateTimeKind.Utc);
+                if (addedAt <= lastSyncDate)
+                    continue; // Skip tracks added before last sync
+
+                // Track is new - upsert it
+                var track = new Track
+                {
+                    Id = savedTrack.Track.Id,
+                    Name = savedTrack.Track.Name,
+                    DurationMs = savedTrack.Track.DurationMs,
+                    Explicit = savedTrack.Track.Explicit,
+                    Popularity = savedTrack.Track.Popularity,
+                    Isrc = savedTrack.Track.ExternalIds?.ContainsKey("isrc") == true
+                        ? savedTrack.Track.ExternalIds["isrc"]
+                        : null,
+                    AddedAt = addedAt,
+                    FirstSyncedAt = now,
+                    LastSyncedAt = now
+                };
+
+                // Check if track already exists (shouldn't for new tracks, but handle it)
+                var existingTrack = await _unitOfWork.Tracks.GetByIdAsync(track.Id);
+                if (existingTrack == null)
+                {
+                    await _unitOfWork.Tracks.AddAsync(track);
+                }
+                else
+                {
+                    // Update existing track metadata
+                    existingTrack.Name = track.Name;
+                    existingTrack.DurationMs = track.DurationMs;
+                    existingTrack.Explicit = track.Explicit;
+                    existingTrack.Popularity = track.Popularity;
+                    existingTrack.Isrc = track.Isrc;
+                    existingTrack.LastSyncedAt = now;
+                    _unitOfWork.Tracks.Update(existingTrack);
+                }
+
+                // Create stub artist records if they don't exist
+                var artistPosition = 0;
+                foreach (var artist in savedTrack.Track.Artists)
+                {
+                    var existingArtist = await _unitOfWork.Artists.GetByIdAsync(artist.Id);
+                    if (existingArtist == null)
+                    {
+                        // Create minimal artist record (will be enriched later)
+                        var stubArtist = new Artist
+                        {
+                            Id = artist.Id,
+                            Name = artist.Name,
+                            Genres = Array.Empty<string>(),
+                            Popularity = 0,
+                            Followers = 0,
+                            FirstSyncedAt = now,
+                            LastSyncedAt = now
+                        };
+                        await _unitOfWork.Artists.AddAsync(stubArtist);
+                    }
+
+                    // Create track-artist relationship
+                    var trackArtist = new TrackArtist
+                    {
+                        TrackId = track.Id,
+                        ArtistId = artist.Id,
+                        Position = artistPosition++
+                    };
+
+                    var existingRelation = (await _unitOfWork.TrackArtists.GetAllAsync())
+                        .FirstOrDefault(ta => ta.TrackId == track.Id && ta.ArtistId == artist.Id);
+
+                    if (existingRelation == null)
+                    {
+                        await _unitOfWork.TrackArtists.AddAsync(trackArtist);
+                    }
+                }
+
+                // Create stub album record if it doesn't exist
+                if (savedTrack.Track.Album != null)
+                {
+                    var existingAlbum = await _unitOfWork.Albums.GetByIdAsync(savedTrack.Track.Album.Id);
+                    if (existingAlbum == null)
+                    {
+                        // Create minimal album record (will be enriched later)
+                        var stubAlbum = new Album
+                        {
+                            Id = savedTrack.Track.Album.Id,
+                            Name = savedTrack.Track.Album.Name,
+                            AlbumType = savedTrack.Track.Album.AlbumType ?? "album",
+                            ReleaseDate = ParseReleaseDate(savedTrack.Track.Album.ReleaseDate),
+                            TotalTracks = savedTrack.Track.Album.TotalTracks,
+                            Label = null,
+                            ImageUrl = null,
+                            FirstSyncedAt = now,
+                            LastSyncedAt = now
+                        };
+                        await _unitOfWork.Albums.AddAsync(stubAlbum);
+                    }
+
+                    // Create track-album relationship
+                    var trackAlbum = new TrackAlbum
+                    {
+                        TrackId = track.Id,
+                        AlbumId = savedTrack.Track.Album.Id,
+                        DiscNumber = savedTrack.Track.DiscNumber,
+                        TrackNumber = savedTrack.Track.TrackNumber
+                    };
+
+                    var existingAlbumRelation = (await _unitOfWork.TrackAlbums.GetAllAsync())
+                        .FirstOrDefault(ta => ta.TrackId == track.Id && ta.AlbumId == savedTrack.Track.Album.Id);
+
+                    if (existingAlbumRelation == null)
+                    {
+                        await _unitOfWork.TrackAlbums.AddAsync(trackAlbum);
+                    }
+                }
+
+                newTracksAdded++;
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            OnProgressChanged("Tracks", offset + savedTracks.Items.Count, savedTracks.Total ?? offset + savedTracks.Items.Count,
+                $"Checked {offset + savedTracks.Items.Count} tracks, found {newTracksAdded} new");
+
+            offset += limit;
+
+            if (offset >= savedTracks.Total)
+                break;
+        }
+
+        _logger.LogInformation("Incremental sync found {Count} new tracks", newTracksAdded);
+        return newTracksAdded;
+    }
+
     private async Task<int> SyncArtistsAsync(CancellationToken cancellationToken)
     {
         var artistsProcessed = 0;
@@ -479,6 +762,120 @@ public class SyncService : ISyncService
 
         _logger.LogInformation("Synced {Count} artists", artistsProcessed);
         return artistsProcessed;
+    }
+
+    /// <summary>
+    /// Incrementally syncs artists that are stubs or have stale metadata
+    /// </summary>
+    /// <param name="metadataThreshold">Sync artists with LastSyncedAt before this date</param>
+    /// <returns>Tuple of (artists added, artists updated)</returns>
+    private async Task<(int Added, int Updated)> IncrementalSyncArtistsAsync(DateTime metadataThreshold, CancellationToken cancellationToken)
+    {
+        var artistsAdded = 0;
+        var artistsUpdated = 0;
+        var now = DateTime.UtcNow;
+
+        _logger.LogInformation("Syncing artists: stubs + stale metadata (before {Threshold})", metadataThreshold);
+
+        // Get all unique artist IDs from track_artists table
+        var trackArtists = await _unitOfWork.TrackArtists.GetAllAsync();
+        var allArtistIds = trackArtists.Select(ta => ta.ArtistId).Distinct().ToList();
+
+        // Get all artists from database
+        var allArtists = await _unitOfWork.Artists.GetAllAsync();
+        var artistsDict = allArtists.ToDictionary(a => a.Id);
+
+        // Identify artists to sync:
+        // 1. Stubs: Genres.Length == 0
+        // 2. Stale: LastSyncedAt < metadataThreshold
+        var artistIdsToSync = allArtistIds.Where(id =>
+        {
+            if (!artistsDict.TryGetValue(id, out var artist))
+                return false; // Artist doesn't exist (shouldn't happen, but skip)
+
+            // Sync if it's a stub (no genres)
+            if (artist.Genres.Length == 0)
+                return true;
+
+            // Sync if metadata is stale
+            if (artist.LastSyncedAt < metadataThreshold)
+                return true;
+
+            return false;
+        }).ToList();
+
+        var totalArtists = allArtistIds.Count;
+        var skippedCount = totalArtists - artistIdsToSync.Count;
+
+        _logger.LogInformation("Syncing {ToSync} artists ({Skipped} up-to-date)",
+            artistIdsToSync.Count, skippedCount);
+
+        foreach (var artistId in artistIdsToSync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _rateLimiter.WaitAsync();
+
+            try
+            {
+                var spotifyArtist = await ExecuteWithRetryAsync(
+                    () => _spotifyClient.Client.Artists.Get(artistId),
+                    $"Artist {artistId}");
+
+                artistsDict.TryGetValue(artistId, out var existingArtist);
+
+                // Track if this was a stub (for counting)
+                var wasStub = existingArtist?.Genres.Length == 0;
+
+                var artist = new Artist
+                {
+                    Id = spotifyArtist.Id,
+                    Name = spotifyArtist.Name,
+                    Genres = spotifyArtist.Genres?.ToArray() ?? Array.Empty<string>(),
+                    Popularity = spotifyArtist.Popularity,
+                    Followers = spotifyArtist.Followers?.Total ?? 0,
+                    FirstSyncedAt = existingArtist?.FirstSyncedAt ?? now,
+                    LastSyncedAt = now
+                };
+
+                if (existingArtist == null)
+                {
+                    await _unitOfWork.Artists.AddAsync(artist);
+                    artistsAdded++;
+                }
+                else
+                {
+                    existingArtist.Name = artist.Name;
+                    existingArtist.Genres = artist.Genres;
+                    existingArtist.Popularity = artist.Popularity;
+                    existingArtist.Followers = artist.Followers;
+                    existingArtist.LastSyncedAt = now;
+                    _unitOfWork.Artists.Update(existingArtist);
+
+                    if (wasStub)
+                        artistsAdded++; // Count stub enrichment as "added"
+                    else
+                        artistsUpdated++; // Count refresh as "updated"
+                }
+
+                if ((artistsAdded + artistsUpdated) % 10 == 0)
+                {
+                    await _unitOfWork.SaveChangesAsync();
+                    OnProgressChanged("Artists", artistsAdded + artistsUpdated, artistIdsToSync.Count,
+                        $"Synced {artistsAdded + artistsUpdated} of {artistIdsToSync.Count} artists ({skippedCount} up-to-date)");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch artist {ArtistId}", artistId);
+            }
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        OnProgressChanged("Artists", artistsAdded + artistsUpdated, artistIdsToSync.Count,
+            $"Completed: {artistsAdded} added, {artistsUpdated} updated");
+
+        _logger.LogInformation("Incremental artist sync: {Added} added, {Updated} updated", artistsAdded, artistsUpdated);
+        return (artistsAdded, artistsUpdated);
     }
 
     private async Task<int> SyncAlbumsAsync(CancellationToken cancellationToken)
@@ -570,6 +967,122 @@ public class SyncService : ISyncService
 
         _logger.LogInformation("Synced {Count} albums", albumsProcessed);
         return albumsProcessed;
+    }
+
+    /// <summary>
+    /// Incrementally syncs albums that are stubs or have stale metadata
+    /// </summary>
+    /// <param name="metadataThreshold">Sync albums with LastSyncedAt before this date</param>
+    /// <returns>Tuple of (albums added, albums updated)</returns>
+    private async Task<(int Added, int Updated)> IncrementalSyncAlbumsAsync(DateTime metadataThreshold, CancellationToken cancellationToken)
+    {
+        var albumsAdded = 0;
+        var albumsUpdated = 0;
+        var now = DateTime.UtcNow;
+
+        _logger.LogInformation("Syncing albums: stubs + stale metadata (before {Threshold})", metadataThreshold);
+
+        // Get all unique album IDs from track_albums table
+        var trackAlbums = await _unitOfWork.TrackAlbums.GetAllAsync();
+        var allAlbumIds = trackAlbums.Select(ta => ta.AlbumId).Distinct().ToList();
+
+        // Get all albums from database
+        var allAlbums = await _unitOfWork.Albums.GetAllAsync();
+        var albumsDict = allAlbums.ToDictionary(a => a.Id);
+
+        // Identify albums to sync:
+        // 1. Stubs: Label is null or empty
+        // 2. Stale: LastSyncedAt < metadataThreshold
+        var albumIdsToSync = allAlbumIds.Where(id =>
+        {
+            if (!albumsDict.TryGetValue(id, out var album))
+                return false; // Album doesn't exist (shouldn't happen, but skip)
+
+            // Sync if it's a stub (no label)
+            if (string.IsNullOrEmpty(album.Label))
+                return true;
+
+            // Sync if metadata is stale
+            if (album.LastSyncedAt < metadataThreshold)
+                return true;
+
+            return false;
+        }).ToList();
+
+        var totalAlbums = allAlbumIds.Count;
+        var skippedCount = totalAlbums - albumIdsToSync.Count;
+
+        _logger.LogInformation("Syncing {ToSync} albums ({Skipped} up-to-date)",
+            albumIdsToSync.Count, skippedCount);
+
+        foreach (var albumId in albumIdsToSync)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _rateLimiter.WaitAsync();
+
+            try
+            {
+                var spotifyAlbum = await ExecuteWithRetryAsync(
+                    () => _spotifyClient.Client.Albums.Get(albumId),
+                    $"Album {albumId}");
+
+                albumsDict.TryGetValue(albumId, out var existingAlbum);
+
+                // Track if this was a stub (for counting)
+                var wasStub = string.IsNullOrEmpty(existingAlbum?.Label);
+
+                var album = new Album
+                {
+                    Id = spotifyAlbum.Id,
+                    Name = spotifyAlbum.Name,
+                    ReleaseDate = ParseReleaseDate(spotifyAlbum.ReleaseDate),
+                    TotalTracks = spotifyAlbum.TotalTracks,
+                    AlbumType = spotifyAlbum.AlbumType,
+                    Label = spotifyAlbum.Label,
+                    FirstSyncedAt = existingAlbum?.FirstSyncedAt ?? now,
+                    LastSyncedAt = now
+                };
+
+                if (existingAlbum == null)
+                {
+                    await _unitOfWork.Albums.AddAsync(album);
+                    albumsAdded++;
+                }
+                else
+                {
+                    existingAlbum.Name = album.Name;
+                    existingAlbum.ReleaseDate = album.ReleaseDate;
+                    existingAlbum.TotalTracks = album.TotalTracks;
+                    existingAlbum.AlbumType = album.AlbumType;
+                    existingAlbum.Label = album.Label;
+                    existingAlbum.LastSyncedAt = now;
+                    _unitOfWork.Albums.Update(existingAlbum);
+
+                    if (wasStub)
+                        albumsAdded++; // Count stub enrichment as "added"
+                    else
+                        albumsUpdated++; // Count refresh as "updated"
+                }
+
+                if ((albumsAdded + albumsUpdated) % 10 == 0)
+                {
+                    await _unitOfWork.SaveChangesAsync();
+                    OnProgressChanged("Albums", albumsAdded + albumsUpdated, albumIdsToSync.Count,
+                        $"Synced {albumsAdded + albumsUpdated} of {albumIdsToSync.Count} albums ({skippedCount} up-to-date)");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch album {AlbumId}", albumId);
+            }
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        OnProgressChanged("Albums", albumsAdded + albumsUpdated, albumIdsToSync.Count,
+            $"Completed: {albumsAdded} added, {albumsUpdated} updated");
+
+        _logger.LogInformation("Incremental album sync: {Added} added, {Updated} updated", albumsAdded, albumsUpdated);
+        return (albumsAdded, albumsUpdated);
     }
 
     private async Task<int> SyncAudioFeaturesAsync(CancellationToken cancellationToken)
@@ -762,6 +1275,94 @@ public class SyncService : ISyncService
 
         _logger.LogInformation("Synced {Count} playlists", playlistsProcessed);
         return playlistsProcessed;
+    }
+
+    /// <summary>
+    /// Incrementally syncs playlists using SnapshotId for change detection
+    /// </summary>
+    /// <returns>Tuple of (total playlists, changed playlists)</returns>
+    private async Task<(int Total, int Changed)> IncrementalSyncPlaylistsAsync(CancellationToken cancellationToken)
+    {
+        var playlistsTotal = 0;
+        var playlistsChanged = 0;
+        var offset = 0;
+        const int limit = 50;
+        var now = DateTime.UtcNow;
+
+        _logger.LogInformation("Checking playlists for changes (using SnapshotId)...");
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _rateLimiter.WaitAsync();
+
+            var playlistsPage = await ExecuteWithRetryAsync(
+                () => _spotifyClient.Client.Playlists.GetUsers(_spotifyClient.UserId!,
+                    new PlaylistGetUsersRequest { Limit = limit, Offset = offset }),
+                $"User playlists (offset {offset})");
+
+            if (playlistsPage.Items == null || playlistsPage.Items.Count == 0)
+                break;
+
+            foreach (var spotifyPlaylist in playlistsPage.Items)
+            {
+                playlistsTotal++;
+
+                var existingPlaylist = await _unitOfWork.Playlists.GetByIdAsync(spotifyPlaylist.Id!);
+                var needsSync = false;
+
+                if (existingPlaylist == null)
+                {
+                    // New playlist - needs sync
+                    var newPlaylist = new Playlist
+                    {
+                        Id = spotifyPlaylist.Id!,
+                        Name = spotifyPlaylist.Name!,
+                        Description = spotifyPlaylist.Description,
+                        OwnerId = spotifyPlaylist.Owner?.Id ?? string.Empty,
+                        IsPublic = spotifyPlaylist.Public ?? false,
+                        SnapshotId = spotifyPlaylist.SnapshotId!,
+                        FirstSyncedAt = now,
+                        LastSyncedAt = now
+                    };
+                    await _unitOfWork.Playlists.AddAsync(newPlaylist);
+                    needsSync = true;
+                    playlistsChanged++;
+                }
+                else if (existingPlaylist.SnapshotId != spotifyPlaylist.SnapshotId)
+                {
+                    // SnapshotId changed - playlist has been modified
+                    existingPlaylist.Name = spotifyPlaylist.Name!;
+                    existingPlaylist.Description = spotifyPlaylist.Description;
+                    existingPlaylist.OwnerId = spotifyPlaylist.Owner?.Id ?? string.Empty;
+                    existingPlaylist.IsPublic = spotifyPlaylist.Public ?? false;
+                    existingPlaylist.SnapshotId = spotifyPlaylist.SnapshotId!;
+                    existingPlaylist.LastSyncedAt = now;
+                    _unitOfWork.Playlists.Update(existingPlaylist);
+                    needsSync = true;
+                    playlistsChanged++;
+                }
+                // else: SnapshotId unchanged - skip track sync
+
+                if (needsSync)
+                {
+                    // Sync playlist tracks (only for new/changed playlists)
+                    await SyncPlaylistTracksAsync(spotifyPlaylist.Id!, cancellationToken);
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            OnProgressChanged("Playlists", playlistsTotal, playlistsPage.Total ?? playlistsTotal,
+                $"Checked {playlistsTotal} playlists, {playlistsChanged} changed");
+
+            offset += limit;
+
+            if (offset >= playlistsPage.Total)
+                break;
+        }
+
+        _logger.LogInformation("Incremental playlist sync: {Total} total, {Changed} changed", playlistsTotal, playlistsChanged);
+        return (playlistsTotal, playlistsChanged);
     }
 
     private async Task SyncPlaylistTracksAsync(string playlistId, CancellationToken cancellationToken)

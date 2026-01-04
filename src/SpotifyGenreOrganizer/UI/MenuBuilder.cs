@@ -20,6 +20,7 @@ public static class MenuBuilder
                 .HighlightStyle(new Style(Color.Cyan1, decoration: Decoration.Bold))
                 .AddChoices(new[] {
                     "Full Sync (Import all data)",
+                    "Incremental Sync (Update changes only)",
                     "Partial Sync (Select stages)",
                     "Genre Analysis",
                     "Explore Genre Clusters & Playlists",

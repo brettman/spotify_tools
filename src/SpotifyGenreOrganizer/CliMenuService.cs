@@ -52,6 +52,9 @@ public class CliMenuService
                     case "Full Sync (Import all data)":
                         await FullSyncAsync();
                         break;
+                    case "Incremental Sync (Update changes only)":
+                        await IncrementalSyncAsync();
+                        break;
                     case "Partial Sync (Select stages)":
                         await PartialSyncAsync();
                         break;
@@ -157,6 +160,54 @@ public class CliMenuService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Full sync failed");
+            AnsiConsole.MarkupLine($"\n[red]❌ Sync failed: {ex.Message.EscapeMarkup()}[/]");
+        }
+    }
+
+    private async Task IncrementalSyncAsync()
+    {
+        AnsiConsole.Write(new Rule("[yellow bold]Incremental Sync[/]").RuleStyle("yellow"));
+        AnsiConsole.WriteLine();
+
+        // Authenticate first
+        await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync("🔐 Authenticating with Spotify...", async ctx =>
+            {
+                if (!_spotifyClient.IsAuthenticated)
+                {
+                    await _spotifyClient.AuthenticateAsync();
+                    ctx.Status("✓ Authenticated");
+                }
+                else
+                {
+                    ctx.Status("✓ Already authenticated");
+                }
+                await Task.Delay(500); // Brief pause to show status
+            });
+
+        AnsiConsole.MarkupLine("\n[cyan]Starting incremental sync...[/]");
+        AnsiConsole.MarkupLine("[dim]Syncing new tracks, updating stale metadata, and checking for playlist changes.[/]");
+        AnsiConsole.MarkupLine("[dim]This is much faster than a full sync - only processes what's changed![/]\n");
+
+        var startTime = DateTime.Now;
+
+        try
+        {
+            using var progressAdapter = new ProgressAdapter(_syncService);
+            var syncId = await progressAdapter.RunWithProgressAsync(
+                async () => await _syncService.IncrementalSyncAsync(),
+                "Initializing incremental sync..."
+            );
+
+            var duration = DateTime.Now - startTime;
+
+            AnsiConsole.MarkupLine($"\n[green]✓ Incremental sync completed successfully![/] (ID: {syncId})");
+            AnsiConsole.MarkupLine($"[yellow]⏱  Duration:[/] {duration:hh\\:mm\\:ss}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Incremental sync failed");
             AnsiConsole.MarkupLine($"\n[red]❌ Sync failed: {ex.Message.EscapeMarkup()}[/]");
         }
     }
