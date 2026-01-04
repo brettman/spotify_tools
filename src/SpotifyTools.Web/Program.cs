@@ -44,7 +44,12 @@ builder.Services.AddScoped<ISyncService, SyncService>();
 // Analytics service
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
-// API Client Service for Blazor
+// Business logic services (Phase 1 refactoring)
+builder.Services.AddScoped<IGenreService, GenreService>();
+builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+
+// API Client Service for Blazor (will be removed in Phase 1)
+// Keeping for now to maintain backwards compatibility during refactoring
 builder.Services.AddHttpClient<ApiClientService>(client =>
 {
     client.BaseAddress = new Uri("http://localhost:5241/");  // Self-reference

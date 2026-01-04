@@ -4,8 +4,10 @@
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
 
-@inject ApiClientService ApiClient
+@inject IGenreService GenreService
+@inject IPlaylistService PlaylistService
 @inject IJSRuntime JS
+@inject ILogger<Home> Logger
 
 <PageTitle>Playlist Manager</PageTitle>
 
@@ -258,13 +260,13 @@
         isLoading = true;
         try
         {
-            genres = await ApiClient.GetGenresAsync();
-            playlists = await ApiClient.GetPlaylistsAsync();
+            // Direct service calls - no HTTP overhead!
+            genres = await GenreService.GetAllGenresAsync();
+            playlists = await PlaylistService.GetAllPlaylistsAsync();
         }
         catch (Exception ex)
         {
-            // Log error but don't show alert during prerender
-            Console.WriteLine($"Error loading data: {ex.Message}");
+            Logger.LogError(ex, "Error loading data");
         }
         finally
         {
@@ -274,27 +276,26 @@
 
     private async Task SelectGenre(string genreName)
     {
-        Console.WriteLine($"SelectGenre called with: {genreName}");
         selectedGenre = genreName;
         loadingTracks = true;
         selectedTracks.Clear();
-        StateHasChanged(); // Force UI update
-        
+        StateHasChanged();
+
         try
         {
-            Console.WriteLine($"Fetching tracks for genre: {genreName}");
-            var result = await ApiClient.GetTracksByGenreAsync(genreName, page: 1, pageSize: 100);
+            // Direct service call with efficient database query
+            var result = await GenreService.GetTracksByGenrePagedAsync(genreName, page: 1, pageSize: 100);
             tracks = result.Items;
-            Console.WriteLine($"Loaded {tracks.Count} tracks");
+            Logger.LogInformation("Loaded {TrackCount} tracks for genre {Genre}", tracks.Count, genreName);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading tracks: {ex.Message}");
+            Logger.LogError(ex, "Error loading tracks for genre {Genre}", genreName);
         }
         finally
         {
             loadingTracks = false;
-            StateHasChanged(); // Force UI update
+            StateHasChanged();
         }
     }
 
@@ -313,19 +314,19 @@
 
     private async Task SelectPlaylist(string playlistId)
     {
-        Console.WriteLine($"SelectPlaylist called with: {playlistId}");
         loadingPlaylist = true;
-        
+
         try
         {
-            Console.WriteLine($"Fetching playlist details for: {playlistId}");
-            selectedPlaylist = await ApiClient.GetPlaylistByIdAsync(playlistId);
+            // Direct service call with efficient single query
+            selectedPlaylist = await PlaylistService.GetPlaylistByIdAsync(playlistId);
             playlistTracks = selectedPlaylist?.Tracks ?? new List<TrackDto>();
-            Console.WriteLine($"Loaded playlist with {playlistTracks.Count} tracks");
+            Logger.LogInformation("Loaded playlist {PlaylistName} with {TrackCount} tracks",
+                selectedPlaylist?.Name, playlistTracks.Count);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading playlist: {ex.Message}");
+            Logger.LogError(ex, "Error loading playlist {PlaylistId}", playlistId);
         }
         finally
         {
