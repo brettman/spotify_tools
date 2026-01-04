@@ -1,326 +1,298 @@
-# Session Summary - January 1, 2026
+# Session Summary - January 4, 2026
 
-## Overview
-Fixed critical playlist sync issue and removed deprecated audio features functionality. Project now ready for production full sync.
+## ✅ CURRENT STATUS: Web UI MVP Complete & Working
 
-## Accomplishments
+### Branch: `cop_webui` (11 commits ahead of main)
 
-### Phase 6.5: Sync Robustness & API Deprecation Handling ✅
+---
 
-**Critical Bug Fix - Playlist Sync:**
-- **Problem:** Foreign key constraint violation when syncing playlists
-  - Playlists contain tracks not in user's saved library
-  - Attempting to create playlist_tracks for non-existent tracks
-  - Error: `23503: insert or update on table "playlist_tracks" violates foreign key constraint`
+## What We Built This Session
 
-**Solution Implemented:**
-- Added track existence check before creating playlist_track relationships
-- Implemented missing track tracking system with HashSet
-- Added `MissingPlaylistTrackIds` field to SyncHistory entity (JSON array)
-- Created and applied database migration `AddMissingPlaylistTrackIds`
-- Missing tracks logged for future incremental sync
+### 1. Complete Web API Layer
+- **4 REST Controllers:** Genres, Tracks, Playlists, Clusters
+- **25+ Endpoints** with full CRUD operations
+- **Swagger/OpenAPI** documentation at `/swagger`
+- **Server-side pagination** for large datasets
+- **Clean DTOs** separating API contracts from domain entities
 
-**Audio Features Handling:**
-- Removed audio features sync (Spotify deprecated batch endpoint)
-- Changed from batch processing to individual fetching (uncommitted work exists)
-- Audio features sync temporarily disabled/removed from full sync
-- Individual track audio features API still works for analytics
+### 2. Interactive Blazor Server UI
+- **Three-panel responsive layout:**
+  - **Left Panel:** Genre list (clickable, shows track counts)
+  - **Center Panel:** Track browser with multi-select checkboxes
+  - **Right Panel:** Playlist list + detail view
+- **Bootstrap 5** styling
+- **SignalR WebSocket** for interactive server-side rendering
+- **Real-time state updates** via StateHasChanged()
 
-**Audio Analysis Status:**
-- Spotify deprecated the audio analysis API endpoint
-- Domain entities (AudioAnalysis, AudioAnalysisSection) kept for future
-- Database tables remain (audio_analyses, audio_analysis_sections)
-- Feature tabled until alternative data source found
+### 3. Working Features
+✅ Browse all genres with track counts
+✅ Click genre → Loads tracks (paginated 100/page)
+✅ Multi-select tracks with checkboxes
+✅ Browse all playlists
+✅ Click playlist → View details (tracks, duration, metadata)
+✅ Close playlist detail (X button) → Return to list
+✅ Loading spinners and async state management
+✅ Debug logging in console and terminal
 
-### Files Modified This Session
+---
 
-**Domain Layer:**
-- `src/SpotifyTools.Domain/Entities/SyncHistory.cs` - Added `MissingPlaylistTrackIds` field
+## Major Issues Resolved
 
-**Sync Service:**
-- `src/SpotifyTools.Sync/SyncService.cs` - Major changes:
-  - Added `_missingPlaylistTrackIds` HashSet field
-  - Modified `SyncPlaylistTracksAsync()` to check track existence
-  - Added missing track logging with track name and playlist ID
-  - Store missing track IDs as JSON in sync history
-  - Log count of missing tracks at sync completion
+### Issue 1: Blazor Not Interactive (SOLVED)
+**Problem:** Clicks on genres/playlists did nothing - page was static
+**Root Cause:** Missing `@rendermode="RenderMode.InteractiveServer"` in App.razor
+**Solution:** Added render mode to `<Routes />` and `<HeadOutlet />` components
+**Result:** WebSocket connection established, clicks now trigger server methods
 
-**Database:**
-- Created migration: `20260101143226_AddMissingPlaylistTrackIds`
-- Applied migration to PostgreSQL database
-- New column: `sync_history.missing_playlist_track_ids` (text, nullable)
-
-### Technical Implementation Details
-
-**Missing Playlist Track Tracking:**
-```csharp
-// In SyncService.cs
-private readonly HashSet<string> _missingPlaylistTrackIds = new();
-
-// In SyncPlaylistTracksAsync():
-var trackExists = await _unitOfWork.Tracks.GetByIdAsync(fullTrack.Id);
-if (trackExists == null)
-{
-    _missingPlaylistTrackIds.Add(fullTrack.Id);
-    _logger.LogDebug("Track {TrackId} ({TrackName}) in playlist {PlaylistId} not found in saved library",
-        fullTrack.Id, fullTrack.Name, playlistId);
-    continue;
-}
-
-// After sync completes:
-if (_missingPlaylistTrackIds.Count > 0)
-{
-    syncHistory.MissingPlaylistTrackIds = System.Text.Json.JsonSerializer.Serialize(_missingPlaylistTrackIds);
-    _logger.LogInformation("Found {Count} tracks in playlists that are not in saved library.", 
-        _missingPlaylistTrackIds.Count);
-}
-```
-
-**Benefits:**
-- FK violations eliminated
-- Clean sync completion
-- Historical tracking for incremental sync planning
-- User visibility into missing data
-
-### Testing Status
-**Current State:**
-- ✅ Build successful with all changes
-- ✅ Database migration applied successfully
-- ✅ Code compiles without errors (1 minor warning)
-- ⏳ Full sync not yet tested with new playlist fix
-- ⏳ Missing track count unknown until sync runs
-
-**Ready for Production Sync:**
-- All FK constraint issues resolved
-- Playlist sync will skip and log missing tracks
-- Sync will complete successfully
-- Missing track IDs will be available in sync_history table
-
-## Technical Decisions This Session
-
-### 1. Missing Playlist Track Handling
-**Decision:** Skip missing tracks and log them for future sync
-
-**Rationale:**
-- Playlists can contain any track, not just saved library
-- Attempting to sync all would require massive additional API calls
-- User may want control over which additional tracks to fetch
-- Logging provides transparency and planning data
-
-**Alternative Considered:** Auto-fetch missing tracks during sync
-- **Rejected:** Could add thousands of unexpected API calls
-- **Rejected:** User may not want all playlist tracks in database
-
-### 2. Storage Format for Missing Track IDs
-**Decision:** Store as JSON array in TEXT column
-
-**Rationale:**
-- Simple serialization with System.Text.Json
-- Easy to query and deserialize
-- No additional table needed
-- Keeps sync history self-contained
-
-**Alternative Considered:** Separate table `missing_playlist_tracks`
-- **Rejected:** Over-engineering for one-time use data
-- **Rejected:** Adds complexity to schema
-
-### 3. Audio Features Sync Removal
-**Decision:** Remove from sync until API issues resolved
-
-**Rationale:**
-- Spotify batch endpoint appears deprecated/broken
-- Individual fetching too slow (3,462 tracks = 3,462 API calls)
-- Audio features available on-demand in analytics
-- Unblocks playlist sync testing
-
-### 4. Audio Analysis Feature Status
-**Decision:** Table indefinitely, keep domain entities
-
-**Rationale:**
-- Spotify officially deprecated the endpoint
-- No alternative data source identified yet
-- Domain model may be useful if API returns
-- Database tables don't hurt anything
-
-## Code Statistics
-
-### Lines of Code Added
-- **SyncService.cs:** ~600 lines
-- **CliMenuService.cs:** ~250 lines
-- **RateLimiter.cs:** ~50 lines
-- **Program.cs:** ~50 lines (rewrite)
-- **Total:** ~950 lines of production code
-
-### Projects Modified
-- SpotifyTools.Sync (created)
-- SpotifyTools.Data (enhanced with 3 new repositories)
-- SpotifyGenreOrganizer (transformed to CLI)
-- Updated 2 projects, created 4 files
-
-### Database Schema
-- 11 tables created and verified
-- 10+ foreign key relationships
-- 5+ indexes for analytics queries
-
-## Challenges Overcome This Session
-
-### 1. Playlist Foreign Key Constraint Violations
-**Problem:** 
-```
-23503: insert or update on table "playlist_tracks" violates foreign key constraint "FK_playlist_tracks_tracks_TrackId"
-```
-- Playlists contain tracks not in saved library
-- Database only has saved tracks
-- FK constraint prevents orphaned relationships
-
+### Issue 2: Database Connection Failed (SOLVED)
+**Problem:** API returning errors, empty panels
+**Root Cause:** Wrong password in appsettings.json (was "spotify", needed actual password)
 **Solution:** 
-- Check track existence before creating playlist_track
-- Skip missing tracks with debug logging
-- Store missing track IDs for future incremental sync
-- Added `MissingPlaylistTrackIds` to SyncHistory
+- Created `appsettings.json.template` with placeholders
+- Updated `.gitignore` to exclude `appsettings.json`
+- User updated local file with password: `my_s3cur3_p455w0rd!`
+**Result:** Database connected, data loading correctly
 
-**Learning:** 
-- Playlists ≠ saved library (can contain any tracks)
-- FK constraints are features, not bugs
-- Track missing data for transparency
+### Issue 3: Browser Caching (SOLVED)
+**Problem:** UI not responding after code changes
+**Root Cause:** Browser cached old Blazor JavaScript without WebSocket support
+**Solution:** Hard refresh (Shift+Refresh or Cmd+Shift+R)
+**Documented:** Added tip to API_SUMMARY.md
+**Result:** WebSocket connection establishes properly
 
-### 2. Audio Features API Deprecation
-**Problem:** 
-- Batch endpoint (100 tracks/request) returning errors
-- Unclear if temporary or permanent issue
-- Blocking full sync progress
+---
 
-**Solution:**
-- Remove audio features from sync temporarily
-- Keep individual fetch capability for analytics
-- Unblocks other sync stages
+## Known Issue (Not Critical)
 
-**Learning:**
-- APIs can deprecate without warning
-- Build fallback strategies
-- Separate on-demand from batch operations
+### Playlist Track Count Mismatch
+**User Observation:** "80s Phoenix Radio" shows 12 tracks in UI but has 98 in Spotify
+**Investigation:** 
+- Database only has 12 tracks for that playlist
+- API correctly returns all 12 tracks in DB
+- UI correctly displays all tracks from API
+**Root Cause:** Sync code (line 798-800 in SyncService.cs) only imports playlist tracks that exist in user's "Saved Tracks" library
+**Resolution:** User needs to re-run full sync from CLI tool to capture more tracks
+**Status:** Not a UI bug - working as designed, data just needs refresh
 
-### 3. Spotify API Changes Discovery
-**Problem:**
-- Audio analysis endpoint deprecated
-- Audio features batch endpoint broken
-- No official deprecation notices found
+---
 
-**Solution:**
-- Monitor API behavior, not just documentation
-- Table features gracefully when APIs disappear
-- Keep domain models for future restoration
+## Architecture Summary
 
-**Learning:**
-- Third-party APIs are unreliable long-term
-- Design for API changes
-- Document what works vs what doesn't
+```
+SpotifyTools.Web (Single ASP.NET Core Process)
+│
+├── API Layer (/api/*)
+│   ├── Controllers/
+│   │   ├── GenresController.cs      - Genre browsing
+│   │   ├── TracksController.cs      - Track CRUD + search
+│   │   ├── PlaylistsController.cs   - Playlist management
+│   │   └── ClustersController.cs    - Genre cluster operations
+│   └── DTOs/
+│       └── (GenreDto, TrackDto, PlaylistDto, etc.)
+│
+├── Blazor UI (/)
+│   ├── Components/
+│   │   ├── App.razor               - Root with InteractiveServer mode
+│   │   ├── Routes.razor            - Routing configuration
+│   │   └── MainLayout.razor        - Simple layout wrapper
+│   ├── Pages/
+│   │   └── Home.razor              - Three-panel main UI
+│   └── Services/
+│       └── ApiClientService.cs     - Typed HTTP client
+│
+└── Shared Services (DI)
+    ├── IAnalyticsService
+    ├── ISyncService
+    ├── IUnitOfWork
+    └── Database (PostgreSQL via EF Core)
+```
 
-## Performance Metrics
+**Key Design Choice:** API + Blazor in same process = in-memory HTTP calls (~1-5ms latency)
 
-### Expected Sync Times (Based on 3,462 tracks, 2,092 artists)
-- **Tracks:** ~2 minutes (50 per API call, pagination)
-- **Artists:** ~35 minutes (1 per API call, rate limited)
-- **Albums:** ~25-30 minutes (estimated 1,500 albums)
-- **Audio Features:** ~1 minute (100 per API call, batched)
-- **Playlists:** ~2-5 minutes
-- **Total:** ~60-75 minutes
+---
 
-### Rate Limiting Efficiency
-- Maximum theoretical: 60 req/min
-- Artist sync: Exactly 60 req/min (bottleneck)
-- Track sync: ~70 requests total (~2 min)
-- Audio features: ~35 requests total (~1 min)
+## How to Resume Work
 
-## Next Steps
+### 1. Start the Application
+```bash
+cd /Users/bretthardman/_dev/spotify_tools/src/SpotifyTools.Web
+dotnet run
 
-### Immediate Actions
-1. ⏳ Run full sync with playlist fix
-2. ⏳ Verify sync completes without errors
-3. ⏳ Check sync_history for missing playlist track count
-4. ⏳ Test track detail reports with real data
-5. ⏳ Commit Phase 6.5 work
+# Access URLs:
+# - Web UI: http://localhost:5241/
+# - API Docs: http://localhost:5241/swagger
+```
+
+### 2. Verify Everything Works
+- [ ] Open http://localhost:5241 in **incognito window** (or Shift+Refresh)
+- [ ] See genres listed in left panel
+- [ ] See playlists in right panel
+- [ ] Click a genre → Tracks appear in center
+- [ ] Click a playlist → Details appear in right panel
+- [ ] Open browser DevTools (F12) → Network tab → See WebSocket connection
+
+### 3. Check Current Branch
+```bash
+cd /Users/bretthardman/_dev/spotify_tools
+git status
+# Should show: On branch cop_webui
+git log --oneline -5
+# Should show latest commits
+```
+
+---
+
+## Next Steps (Priority Order)
+
+### Immediate Tasks
+1. **"Add to Playlist" Modal** ⏳ (Next feature to implement)
+   - Select tracks with checkboxes
+   - Click "Add to Playlist" button
+   - Modal appears with playlist dropdown
+   - Submit → Tracks added via API
+
+2. **"Create New Playlist" Modal** ⏳
+   - Click "+ New" button in playlist panel
+   - Form: Name (required), Description (optional), Public/Private toggle
+   - Submit → Create via POST /api/playlists
+
+3. **Track Removal** ⏳
+   - In playlist detail view, add delete button per track
+   - Confirm deletion
+   - Remove via DELETE /api/playlists/{id}/tracks/{trackId}
 
 ### Future Enhancements
+4. **Virtualization** - For 1000+ track lists (use Blazor.Virtualizer)
+5. **Search/Filter** - Search tracks by name or artist
+6. **Drag & Drop** - Visual track reordering (nice-to-have)
+7. **Genre Cluster UI** - Manage saved clusters, create playlists from clusters
 
-**High Priority:**
-- Incremental sync to fetch missing playlist tracks
-- Use stored MissingPlaylistTrackIds from sync_history
-- Add menu option for targeted track fetching
+---
 
-**Analytics Enhancements:**
-- Tempo distribution analysis (using audio_features data)
-- Key/mode distribution for DJ mixing
-- Genre statistics from artist data
-- Playlist analytics and insights
+## File Inventory
 
-**Long Term:**
-- Web interface (ASP.NET Core or Blazor)
-- Automated scheduling (background services)
-- Export functionality
-- Alternative audio analysis data source
-
-## Session Statistics
-
-**Time:** ~30 minutes
-**Focus:** Debugging and fixing playlist sync issue
-
-**Changes:**
-- 1 domain entity modified (SyncHistory)
-- 1 sync service file modified (SyncService.cs)
-- 1 database migration created and applied
-- ~30 lines of code added
-- 2 documentation files updated (context.md, SESSION_SUMMARY.md)
-
-## Git Status
-
-### Uncommitted Changes
-- Modified: `src/SpotifyTools.Domain/Entities/SyncHistory.cs`
-- Modified: `src/SpotifyTools.Sync/SyncService.cs`
-- Created: `src/SpotifyTools.Data/Migrations/20260101143226_AddMissingPlaylistTrackIds.cs`
-- Modified: `context.md`
-- Modified: `SESSION_SUMMARY.md`
-- Various build artifacts (obj/, bin/)
-
-### Unpushed Commits (4 commits ahead of origin/main)
-- `c065acd` - fix: stop audio features sync immediately on first error
-- `d0d4fa1` - feat: add detailed API error logging for audio features
-- `122c427` - feat: add partial sync to run individual sync stages
-- `c6f1f97` - fix: add retry logic and validation to audio features sync
-
-### Recommended Commit Message
+### New Files Created This Session
 ```
-fix: resolve playlist sync FK constraint violation
+src/SpotifyTools.Web/
+├── Controllers/
+│   ├── GenresController.cs
+│   ├── TracksController.cs
+│   ├── PlaylistsController.cs
+│   └── ClustersController.cs
+├── DTOs/
+│   ├── GenreDto.cs
+│   ├── TrackDto.cs
+│   ├── PlaylistDto.cs
+│   ├── ClusterDto.cs
+│   ├── PagedResult.cs
+│   └── CreatePlaylistRequest.cs
+├── Components/
+│   ├── App.razor
+│   ├── Routes.razor
+│   ├── MainLayout.razor
+│   └── _Imports.razor
+├── Pages/
+│   ├── Home.razor
+│   └── _Imports.razor
+├── Services/
+│   └── ApiClientService.cs
+├── wwwroot/css/
+│   └── app.css
+├── Program.cs
+├── appsettings.json (local only, excluded from git)
+└── appsettings.json.template (committed)
 
-- Add MissingPlaylistTrackIds field to SyncHistory entity
-- Skip playlist tracks not in saved library during sync
-- Log missing track IDs for future incremental sync
-- Apply database migration AddMissingPlaylistTrackIds
-- Update documentation (context.md, SESSION_SUMMARY.md)
-
-Fixes #issue playlist sync failing with FK constraint error
+# Root Directory
+WebUIArchitecture.md      - Complete design documentation
+API_SUMMARY.md            - API endpoint reference + feature status
+SESSION_SUMMARY.md        - This file
 ```
 
-## Success Criteria - Met ✅
+### Key Configuration Files
+- **appsettings.json** (local) - Contains real password, NOT in git
+- **appsettings.json.template** (committed) - Template with placeholders
+- **.gitignore** - Updated to exclude `**/appsettings.json`
 
-- [x] Playlist sync FK constraint issue identified
-- [x] Solution designed (skip & log missing tracks)
-- [x] Domain entity updated (MissingPlaylistTrackIds field)
-- [x] Sync service modified with existence checks
-- [x] Database migration created and applied
-- [x] Code compiles without errors
-- [x] Documentation updated (context.md, SESSION_SUMMARY.md)
-- [ ] Full sync tested with playlist fix (pending)
-- [ ] Missing track count verified (pending)
+---
 
-## Conclusion
+## Testing Checklist
 
-**Phase 6.5 Complete** - Playlist sync FK constraint issue resolved. The sync will now complete successfully by skipping tracks in playlists that aren't in the saved library, while logging their IDs for future incremental sync. Audio features and audio analysis have been tabled due to Spotify API deprecation.
+### API Layer
+- [x] GET /api/genres - Returns all genres
+- [x] GET /api/genres/{name}/tracks?page=1 - Returns paginated tracks
+- [x] GET /api/playlists - Returns all playlists
+- [x] GET /api/playlists/{id} - Returns playlist with tracks
+- [x] POST /api/playlists - Creates new playlist
+- [x] Swagger UI loads at /swagger
 
-**Status:** ✅ Ready for production full sync
+### Blazor UI
+- [x] Page loads without errors
+- [x] Genres appear in left panel
+- [x] Playlists appear in right panel
+- [x] Click genre → Tracks load
+- [x] Click playlist → Details appear
+- [x] Checkboxes selectable (multi-select works)
+- [x] WebSocket connection visible in Network tab
+- [x] Console logs show method calls
 
-**Blocked Features:**
-- ⚠️ Audio features batch sync (API deprecated)
-- ⚠️ Audio analysis (API deprecated)
+---
 
-**Next Session:** Run full sync and verify missing playlist track logging works correctly.
+## Important Notes for Next Session
+
+### Database Connection
+- **Host:** localhost:5433
+- **Database:** spotify
+- **Username:** spotify  
+- **Password:** (in local appsettings.json, not committed)
+- **Docker:** Should be running (`docker ps | grep postgres`)
+
+### Browser Cache Issues
+If UI doesn't respond to clicks:
+1. Open **incognito/private window** OR
+2. **Hard refresh:** Shift+F5 (Windows) or Cmd+Shift+R (Mac)
+3. Check Network tab for WebSocket connection to `/_blazor?id=...`
+
+### Debugging Tips
+- Browser console: `console.log(Blazor)` - Should show object, not undefined
+- Terminal logs: Method calls logged with `Console.WriteLine`
+- Network tab: Filter by "WS" to see WebSocket traffic
+
+### User Preferences
+- Backend-focused developer, new to modern web UI
+- Chose Blazor Server for C# familiarity
+- Wanted API layer for clean architecture (even though Blazor can inject services directly)
+- Appreciates detailed logging for debugging
+
+---
+
+## Commit History (Recent)
+```
+adf0912 - Implement playlist details view
+167814a - Update docs with working Blazor interactivity
+9f6bb9d - Enable InteractiveServer render mode
+ea1eec2 - Add MainLayout and fix Blazor Server interactive rendering
+1596065 - Add StreamRendering attribute
+8bea4f9 - Add appsettings.json.template
+a67cdb0 - Fix JS interop error during prerendering
+6310437 - Update summary with Blazor UI completion
+3931dc7 - Add Blazor Server UI with three-panel layout
+5533147 - Add API layer implementation summary
+a4948d7 - Add Web API layer with controllers and DTOs
+0d01abc - Add Web UI architecture documentation
+```
+
+---
+
+## When You Return
+
+1. **Read this summary** (you're doing it now!)
+2. **Checkout branch:** `git checkout cop_webui`
+3. **Start app:** `cd src/SpotifyTools.Web && dotnet run`
+4. **Test in incognito:** http://localhost:5241
+5. **Pick next task:** Implement "Add to Playlist" modal (recommended)
+
+---
+
+**Session End:** 2026-01-04 ~06:15 UTC  
+**Status:** ✅ All work committed, ready to resume  
+**Next Feature:** "Add to Playlist" modal with playlist selector dropdown
