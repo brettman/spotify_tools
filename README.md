@@ -5,7 +5,8 @@ A C# application that syncs your Spotify library to PostgreSQL for offline acces
 ## Features
 
 ### Current
-- ✅ **Full Library Sync** - Import all saved tracks, artists, albums, playlists
+- ✅ **Full Library Sync** - Import all saved tracks, artists, albums, playlists (including playlist-only tracks)
+- ✅ **Incremental Sync** - Fast updates for new/changed data only (tracks, artists, albums, playlists)
 - ✅ **Partial Sync** - Sync individual stages (tracks, artists, albums, playlists)
 - ✅ **PostgreSQL Storage** - Local database with snake_case naming for offline queries
 - ✅ **Interactive CLI** - Beautiful terminal interface powered by Spectre.Console
@@ -20,17 +21,18 @@ A C# application that syncs your Spotify library to PostgreSQL for offline acces
 - ✅ **Cluster Persistence** - Save, edit, delete, and finalize refined clusters
 - ✅ **Cluster Management** - Full CRUD operations with database persistence
 - ✅ **Smart Genre Handling** - Orphaned genres intelligently reassigned or tracked
+- ✅ **Playlist Generation** - Create Spotify playlists from finalized genre clusters
+- ✅ **Track Exclusion System** - Remove specific tracks from cluster playlists
 - ✅ **Artist Insights** - Top artists by follower count, track count, and popularity
 - ❌ **Audio Features** - ~~Unavailable (Spotify API restricted as of Nov 27, 2024)~~
 
 ### Coming Soon
-- 📅 **Playlist Generation** - Create Spotify playlists from finalized clusters
 - 📅 **Track Preview** - View track lists within clusters before playlist creation
 - 📅 **Genre Filter** - Exclude already-organized genres from new suggestions
 - 📅 **Advanced Reports** - Genre trends, artist discovery, playlist insights
-- 📅 **Incremental Sync** - Update only changed data
 - 📅 **Web Interface** - Browse and analyze your library in a browser
 - 📅 **Audio Features** - Exploring third-party APIs and local analysis tools
+- 📅 **Playlist Sync Back** - Detect and sync manual changes to generated playlists
 
 ## Architecture
 
@@ -124,29 +126,55 @@ dotnet run
 ### Main Menu
 
 ```
-╔════════════════════════════════════════╗
-║     Spotify Tools - CLI Interface     ║
-╠════════════════════════════════════════╣
-║  1. Full Sync (Import all data)       ║
-║  2. View Last Sync Status              ║
-║  3. View Sync History                  ║
-║  4. Analytics (Coming soon)            ║
-║  5. Exit                               ║
-╚════════════════════════════════════════╝
+╔══════════════════════════════════════╗
+║   Spotify Tools - Main Menu         ║
+╚══════════════════════════════════════╝
+  1. Full Sync (Import all data)
+  2. Incremental Sync (Update changes only)
+  3. Partial Sync (Select stages)
+  4. Genre Analysis
+  5. Explore Genre Clusters & Playlists
+  6. View Last Sync Status
+  7. View Sync History
+  8. Track Detail Report
+  9. Exit
 ```
 
 ### Full Sync
 
 Option 1 performs a complete import:
 1. Authenticates with Spotify (opens browser)
-2. Fetches all saved tracks
-3. Fetches artist details with genres
-4. Fetches album details
-5. Fetches user playlists
+2. Fetches all saved tracks with metadata
+3. Fetches artist details with genres and follower counts
+4. Fetches album details with labels and release dates
+5. Fetches all user playlists **including tracks not in your saved library**
+6. Syncs audio features (currently limited - see API restrictions below)
 
 **Time Estimate:**
 - ~30-45 minutes per 3,000 tracks (due to API rate limiting)
 - Progress updates shown in real-time
+
+### Incremental Sync
+
+Option 2 performs a fast update of changed data only:
+1. Checks last sync date (falls back to full sync if >30 days)
+2. Fetches only **new tracks** added since last sync (filtered by date)
+3. Enriches artist/album stubs created during previous syncs
+4. Refreshes metadata for artists/albums not updated in 7+ days
+5. Checks playlist SnapshotIds and re-syncs only changed playlists
+6. Much faster than full sync - typically completes in 2-5 minutes
+
+**When to Use:**
+- Daily or weekly library updates
+- After adding new tracks to Spotify
+- After modifying playlists
+- To keep metadata fresh without re-importing everything
+
+**Benefits:**
+- Significantly faster than full sync (processes only changes)
+- Lower API usage (fewer rate limit concerns)
+- Automatic stub enrichment (completes partial data from playlists)
+- Smart playlist detection (only re-syncs modified playlists)
 
 ### View Sync Status
 
@@ -272,24 +300,28 @@ See **DOCKER.md** for view descriptions and example queries.
 - Full library import (tracks, artists, albums, playlists)
 - Database views for analytics
 
-### Phase 6: Current Focus ⏳
+### Phase 6: Complete ✅
 - **Genre Clustering & Playlist Organization:**
   - ✅ Genre analysis with overlap detection
   - ✅ Auto-suggested genre clusters (10 predefined patterns + individual large genres)
   - ✅ Interactive cluster refinement (view all genres, remove genres that don't fit)
   - ✅ Smart orphaned genre handling (create new clusters, unclustered bucket, suggestions)
-  - 🔨 Cluster persistence and saving
-  - 🔨 Track list preview within clusters
-  - 🔨 Spotify playlist generation from approved clusters
+  - ✅ Cluster persistence with full CRUD operations
+  - ✅ Track exclusion system for fine-tuning cluster playlists
+  - ✅ Spotify playlist generation from finalized clusters
 
 - **Analytics and Reporting:**
   - ✅ Genre analysis and distribution reports
   - ✅ Artist insights and discovery
-  - Playlist composition analysis
-  - Temporal trends (library growth, release patterns)
-  - Cross-referencing and correlation analysis
+  - ✅ Track detail reports with complete metadata
+  - ✅ Cluster playlist reports with track counts
 
-### Phase 7: Planned 📅
+- **Sync Improvements:**
+  - ✅ Incremental sync for fast updates (new tracks, stale metadata, changed playlists)
+  - ✅ Fixed playlist sync bugs (position calculation, playlist-only tracks)
+  - ✅ Complete metadata syncing for all tracks (including non-library playlist tracks)
+
+### Phase 7: Current Focus ⏳
 - **Enhanced Analytics:**
   - Interactive visualizations
   - Custom report generation
@@ -300,12 +332,19 @@ See **DOCKER.md** for view descriptions and example queries.
   - Local audio analysis pipeline
   - Alternative data enrichment
 
+### Phase 8: Planned 📅
+- **Track Preview in Clusters** - View full track lists before playlist creation
+- **Genre Filter** - Exclude already-organized genres from new cluster suggestions
+- **Playlist Composition Analysis** - Track overlap, diversity metrics
+- **Temporal Trends** - Library growth charts, release date patterns
+- **Advanced Reports** - Exportable analytics (CSV, JSON)
+
 ### Future Phases
-- Incremental sync (only fetch changes)
 - Web interface (ASP.NET Core with Blazor)
 - Advanced recommendations engine
 - External data integration (MusicBrainz, Last.fm)
 - Backup and restore functionality
+- Playlist sync back (detect manual changes to generated playlists)
 
 ## Contributing
 

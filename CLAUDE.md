@@ -188,19 +188,77 @@ See `issues.md` for tracked bugs and UX improvements:
 - Minor: Cannot exit edit screen without making changes
 - Medium: Already-organized genres still appear in new suggestions
 
+**Implemented Features:**
+1. ✅ Spotify playlist generation from finalized clusters (`CreatePlaylistFromClusterAsync`)
+2. ✅ Track exclusion system (`ExcludeTrackAsync`, `IncludeTrackAsync`, `GetExcludedTrackIdsAsync`)
+3. ✅ Playlist persistence with database fields (`spotify_playlist_id`, `playlist_created_at`)
+
 **Planned Features:**
 1. Track list preview within clusters (Artist | Song | Duration | Album | Genre)
 2. Filter already-organized genres from new suggestions
 3. Unclustered genre tracking and management
-4. Spotify playlist generation from finalized clusters
-5. Alternative cluster suggestions using genre overlap analysis
-6. Custom cluster creation from scratch
+4. Alternative cluster suggestions using genre overlap analysis
+5. Custom cluster creation from scratch
+6. Playlist sync back (detect manual changes to generated playlists)
 
 **User Feedback Incorporated:**
 - Genre clustering must respect subgenre differences (e.g., "hard bop" ≠ "smooth jazz")
 - Interactive refinement needed instead of automatic clustering
 - Removed genres need intelligent handling (not just dropped)
 - Description must reflect actual refined genre list, not original
+
+## Sync System
+
+### Sync Types
+
+**Full Sync (`FullSyncAsync`):**
+- Imports all saved tracks, artists, albums, and playlists
+- Creates artist/album stubs for quick initial import
+- **Critical Fix (Jan 2026):** Now syncs ALL playlist tracks, including those not in saved library
+- Creates complete metadata for playlist-only tracks (artists, albums, relationships)
+- Time: ~30-45 minutes per 3,000 tracks (rate limited)
+
+**Incremental Sync (`IncrementalSyncAsync`):**
+- **Status:** ✅ Fully implemented (Jan 2026)
+- Smart update that only processes changes since last sync
+- Automatic fallback to full sync if no previous sync or >30 days old
+
+**How Incremental Sync Works:**
+1. **New Tracks** - Filters by `AddedAt` date, syncs only tracks added since last sync
+2. **Artist Stubs** - Enriches stubs (Genres.Length == 0) with full metadata
+3. **Stale Artists** - Refreshes artists with `LastSyncedAt` > 7 days old
+4. **Album Stubs** - Enriches stubs (Label is null/empty) with full metadata
+5. **Stale Albums** - Refreshes albums with `LastSyncedAt` > 7 days old
+6. **Changed Playlists** - Uses `SnapshotId` comparison to detect changes, only re-syncs modified playlists
+
+**Configuration Constants:**
+- `METADATA_REFRESH_DAYS = 7` - How often to refresh artist/album metadata
+- `FULL_SYNC_FALLBACK_DAYS = 30` - Max days between syncs before forcing full sync
+
+**Benefits:**
+- Much faster than full sync (typically 2-5 minutes vs 30-45 minutes)
+- Lower API usage (fewer rate limit concerns)
+- Automatic stub enrichment (completes partial data from playlists)
+- Smart change detection (only processes what's new/changed)
+
+### Critical Sync Bug Fixes (Jan 2026)
+
+**Bug 1: Playlist Track Position Calculation**
+- **Issue:** Used `offset + IndexOf(item)` AFTER offset was incremented
+- **Fix:** Introduced `globalPosition` counter that increments sequentially
+- **Impact:** Track positions now accurately reflect playlist order
+
+**Bug 2: Missing Playlist Tracks (CRITICAL)**
+- **Issue:** Tracks in playlists but not in saved library were silently skipped
+- **Fix:** Changed from `continue` to full track sync with complete metadata
+- **Impact:** All playlist tracks now sync, regardless of saved library status
+- **Example:** "80s Phoenix Radio" now syncs all 98 tracks instead of just 12
+
+**Implementation Details:**
+- Creates artist stubs for playlist-only track artists
+- Creates album stubs for playlist-only track albums
+- Establishes all relationship records (TrackArtist, TrackAlbum)
+- Ensures referential integrity for all tracks
 
 ## Important Implementation Details
 
