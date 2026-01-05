@@ -1,0 +1,22 @@
+[Unit]
+Description=Spotify Playback Tracking Worker Service
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+# Update this path to match your installation directory
+WorkingDirectory=/home/YOUR_USERNAME/spotify_tools/src/SpotifyTools.PlaybackWorker
+ExecStart=/home/YOUR_USERNAME/spotify_tools/src/SpotifyTools.PlaybackWorker/bin/Release/net8.0/SpotifyTools.PlaybackWorker
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=spotify-playback-worker
+User=YOUR_USERNAME
+Environment=DOTNET_ENVIRONMENT=Production
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

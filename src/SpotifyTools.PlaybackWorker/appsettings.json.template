@@ -1,0 +1,41 @@
+{
+  "ConnectionStrings": {
+    "SpotifyDatabase": "Host=localhost;Port=5433;Database=spotify_tools;Username=YOUR_DB_USERNAME;Password=YOUR_DB_PASSWORD"
+  },
+  "Spotify": {
+    "ClientId": "YOUR_SPOTIFY_CLIENT_ID",
+    "ClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET",
+    "RedirectUri": "http://127.0.0.1:5009/callback"
+  },
+  "PlaybackTracking": {
+    "PollingIntervalMinutes": 10,
+    "EnableErrorAlerts": true,
+    "MaxConsecutiveErrors": 5
+  },
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "System": "Warning"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "Console",
+        "Args": {
+          "outputTemplate": "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"
+        }
+      },
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/playback-worker-.log",
+          "rollingInterval": "Day",
+          "retainedFileCountLimit": 30,
+          "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] {Message:lj}{NewLine}{Exception}"
+        }
+      }
+    ]
+  }
+}

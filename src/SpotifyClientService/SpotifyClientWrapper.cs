@@ -29,6 +29,8 @@ public class SpotifyClientWrapper : ISpotifyClientService
 
     public bool IsAuthenticated => _client != null;
 
+    public string? RefreshToken => _tokenResponse?.RefreshToken;
+
     public SpotifyClientWrapper(IConfiguration configuration)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
@@ -135,6 +137,74 @@ public class SpotifyClientWrapper : ISpotifyClientService
         await tcs.Task;
 
         Console.WriteLine("✓ Authentication successful!\n");
+    }
+
+    /// <summary>
+    /// Authenticates using a stored refresh token (for background services)
+    /// </summary>
+    public async Task AuthenticateWithRefreshTokenAsync(string refreshToken)
+    {
+        var clientId = _configuration["Spotify:ClientId"];
+        var clientSecret = _configuration["Spotify:ClientSecret"];
+
+        if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+        {
+            throw new InvalidOperationException(
+                "Spotify ClientId and ClientSecret must be configured in appsettings.json");
+        }
+
+        if (string.IsNullOrEmpty(refreshToken))
+        {
+            throw new ArgumentException("Refresh token cannot be null or empty", nameof(refreshToken));
+        }
+
+        // Use the refresh token to get a new access token
+        var config = SpotifyClientConfig.CreateDefault();
+        var refreshResponse = await new OAuthClient(config).RequestToken(
+            new AuthorizationCodeRefreshRequest(
+                clientId,
+                clientSecret,
+                refreshToken
+            )
+        );
+
+        // Convert refresh response to token response for storage
+        // Note: The refresh response includes the new access token but may not include a new refresh token
+        var tokenResponse = new AuthorizationCodeTokenResponse
+        {
+            AccessToken = refreshResponse.AccessToken,
+            TokenType = refreshResponse.TokenType,
+            ExpiresIn = refreshResponse.ExpiresIn,
+            Scope = refreshResponse.Scope,
+            RefreshToken = refreshToken, // Use the original refresh token
+            CreatedAt = refreshResponse.CreatedAt
+        };
+
+        _tokenResponse = tokenResponse;
+
+        // Create authenticator that will automatically refresh tokens
+        var authenticator = new AuthorizationCodeAuthenticator(
+            clientId,
+            clientSecret,
+            tokenResponse
+        );
+
+        // Configure automatic token refresh
+        authenticator.TokenRefreshed += (sender, token) =>
+        {
+            _tokenResponse = token;
+            Console.WriteLine("🔄 Access token automatically refreshed");
+        };
+
+        var clientConfig = SpotifyClientConfig
+            .CreateDefault()
+            .WithAuthenticator(authenticator);
+
+        _client = new SpotifyClient(clientConfig);
+
+        // Get user profile
+        var profile = await _client.UserProfile.Current();
+        _userId = profile.Id;
     }
 
     private static void OpenBrowser(string url)

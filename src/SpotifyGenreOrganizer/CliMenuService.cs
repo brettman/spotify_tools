@@ -115,6 +115,46 @@ public class CliMenuService
         AnsiConsole.WriteLine();
     }
 
+    /// <summary>
+    /// Ensures the client is authenticated and saves the refresh token to the database
+    /// </summary>
+    private async Task EnsureAuthenticatedAndSaveTokenAsync()
+    {
+        if (!_spotifyClient.IsAuthenticated)
+        {
+            await _spotifyClient.AuthenticateAsync();
+        }
+
+        // Always save/update the refresh token when we have one (even if already authenticated)
+        if (_spotifyClient.RefreshToken != null && _spotifyClient.UserId != null)
+        {
+            var allTokens = await _unitOfWork.SpotifyTokens.GetAllAsync();
+            var token = allTokens.FirstOrDefault(t => t.UserIdentifier == _spotifyClient.UserId);
+
+            if (token != null)
+            {
+                // Update existing token
+                token.EncryptedRefreshToken = _spotifyClient.RefreshToken;
+                token.LastUsedAt = DateTime.UtcNow;
+                _unitOfWork.SpotifyTokens.Update(token);
+            }
+            else
+            {
+                // Create new token
+                var newToken = new SpotifyTools.Domain.Entities.SpotifyToken
+                {
+                    UserIdentifier = _spotifyClient.UserId,
+                    EncryptedRefreshToken = _spotifyClient.RefreshToken,
+                    LastUsedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _unitOfWork.SpotifyTokens.AddAsync(newToken);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            _logger.LogInformation("Refresh token saved to database for user {UserId}", _spotifyClient.UserId);
+        }
+    }
 
     private async Task FullSyncAsync()
     {
@@ -126,15 +166,8 @@ public class CliMenuService
             .Spinner(Spinner.Known.Dots)
             .StartAsync("🔐 Authenticating with Spotify...", async ctx =>
             {
-                if (!_spotifyClient.IsAuthenticated)
-                {
-                    await _spotifyClient.AuthenticateAsync();
-                    ctx.Status("✓ Authenticated");
-                }
-                else
-                {
-                    ctx.Status("✓ Already authenticated");
-                }
+                await EnsureAuthenticatedAndSaveTokenAsync();
+                ctx.Status("✓ Authenticated");
                 await Task.Delay(500); // Brief pause to show status
             });
 
@@ -174,15 +207,8 @@ public class CliMenuService
             .Spinner(Spinner.Known.Dots)
             .StartAsync("🔐 Authenticating with Spotify...", async ctx =>
             {
-                if (!_spotifyClient.IsAuthenticated)
-                {
-                    await _spotifyClient.AuthenticateAsync();
-                    ctx.Status("✓ Authenticated");
-                }
-                else
-                {
-                    ctx.Status("✓ Already authenticated");
-                }
+                await EnsureAuthenticatedAndSaveTokenAsync();
+                ctx.Status("✓ Authenticated");
                 await Task.Delay(500); // Brief pause to show status
             });
 
@@ -248,6 +274,16 @@ public class CliMenuService
             AnsiConsole.MarkupLine("[red]❌ Invalid choice.[/]");
             return;
         }
+
+        // Authenticate and save token
+        await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync("🔐 Authenticating with Spotify...", async ctx =>
+            {
+                await EnsureAuthenticatedAndSaveTokenAsync();
+                ctx.Status("✓ Authenticated");
+                await Task.Delay(500);
+            });
 
         AnsiConsole.MarkupLine($"\n[cyan]Starting {stageName.EscapeMarkup()} sync...[/]");
         AnsiConsole.MarkupLine("[dim]This may take a while depending on your library size.[/]\n");
@@ -1610,15 +1646,8 @@ public class CliMenuService
             .Spinner(Spinner.Known.Dots)
             .StartAsync("🔐 Authenticating with Spotify...", async ctx =>
             {
-                if (!_spotifyClient.IsAuthenticated)
-                {
-                    await _spotifyClient.AuthenticateAsync();
-                    ctx.Status("✓ Authenticated");
-                }
-                else
-                {
-                    ctx.Status("✓ Already authenticated");
-                }
+                await EnsureAuthenticatedAndSaveTokenAsync();
+                ctx.Status("✓ Authenticated");
                 await Task.Delay(500);
             });
 

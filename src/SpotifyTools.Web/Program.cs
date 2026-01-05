@@ -50,8 +50,8 @@ builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IPlayHistoryService, PlayHistoryService>();
 builder.Services.AddScoped<IListeningAnalyticsService, ListeningAnalyticsService>();
 
-// Background services
-builder.Services.AddHostedService<PlaybackTrackingService>();
+// NOTE: Playback tracking has been moved to a standalone Worker Service (SpotifyTools.PlaybackWorker)
+// This allows the tracking to run 24/7 independently of the web application
 
 // API Client Service for Blazor (will be removed in Phase 1)
 // Keeping for now to maintain backwards compatibility during refactoring

@@ -13,6 +13,12 @@ public interface ISpotifyClientService
     Task AuthenticateAsync();
 
     /// <summary>
+    /// Authenticates with Spotify using a stored refresh token (for background services)
+    /// </summary>
+    /// <param name="refreshToken">The refresh token to use for authentication</param>
+    Task AuthenticateWithRefreshTokenAsync(string refreshToken);
+
+    /// <summary>
     /// Gets the authenticated Spotify client
     /// </summary>
     SpotifyClient Client { get; }
@@ -26,4 +32,9 @@ public interface ISpotifyClientService
     /// Whether the service has been authenticated
     /// </summary>
     bool IsAuthenticated { get; }
+
+    /// <summary>
+    /// Gets the current refresh token (for persistence)
+    /// </summary>
+    string? RefreshToken { get; }
 }
