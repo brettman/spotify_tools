@@ -26,7 +26,12 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
         {
             var (startDate, endDate) = GetDateRange(range);
 
-            var query = _dbContext.PlayHistories.AsQueryable();
+            var query = _dbContext.PlayHistories
+                .AsNoTracking()
+                .Include(ph => ph.Track)
+                    .ThenInclude(t => t.TrackArtists)
+                .AsQueryable();
+
             if (startDate.HasValue)
                 query = query.Where(ph => ph.PlayedAt >= startDate.Value);
             if (endDate.HasValue)
@@ -40,6 +45,9 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
 
             // Count unique artists
             var uniqueArtists = await _dbContext.PlayHistories
+                .AsNoTracking()
+                .Include(ph => ph.Track)
+                    .ThenInclude(t => t.TrackArtists)
                 .Where(ph => startDate == null || ph.PlayedAt >= startDate.Value)
                 .Where(ph => endDate == null || ph.PlayedAt <= endDate.Value)
                 .SelectMany(ph => ph.Track.TrackArtists.Select(ta => ta.ArtistId))
@@ -77,45 +85,44 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
         {
             var (startDate, endDate) = GetDateRange(range);
 
-            var query = from t in _dbContext.Tracks
-                        join ph in _dbContext.PlayHistories on t.Id equals ph.TrackId
-                        where (startDate == null || ph.PlayedAt >= startDate.Value) &&
-                              (endDate == null || ph.PlayedAt <= endDate.Value)
-                        group ph by new { t.Id, t.Name, t.DurationMs, t.Popularity } into g
-                        orderby g.Count() descending
-                        select new
-                        {
-                            g.Key.Id,
-                            g.Key.Name,
-                            g.Key.DurationMs,
-                            g.Key.Popularity,
-                            PlayCount = g.Count(),
-                            LastPlayed = g.Max(ph => ph.PlayedAt)
-                        };
+            var trackPlayCounts = await (from t in _dbContext.Tracks.AsNoTracking()
+                                         join ph in _dbContext.PlayHistories on t.Id equals ph.TrackId
+                                         where (startDate == null || ph.PlayedAt >= startDate.Value) &&
+                                               (endDate == null || ph.PlayedAt <= endDate.Value)
+                                         group ph by t.Id into g
+                                         orderby g.Count() descending
+                                         select new
+                                         {
+                                             TrackId = g.Key,
+                                             PlayCount = g.Count(),
+                                             LastPlayed = g.Max(ph => ph.PlayedAt)
+                                         })
+                                         .Take(top)
+                                         .ToListAsync();
 
-            var tracks = await query.Take(top).ToListAsync();
+            var trackIds = trackPlayCounts.Select(t => t.TrackId).ToList();
 
-            // Get artists for each track
-            var result = new List<TrackPlayCountDto>();
-            foreach (var track in tracks)
+            var tracksWithArtists = await _dbContext.Tracks
+                .AsNoTracking()
+                .Include(t => t.TrackArtists.OrderBy(ta => ta.Position))
+                    .ThenInclude(ta => ta.Artist)
+                .Where(t => trackIds.Contains(t.Id))
+                .ToListAsync();
+
+            var result = trackPlayCounts.Select(tpc =>
             {
-                var artists = await _dbContext.TrackArtists
-                    .Where(ta => ta.TrackId == track.Id)
-                    .OrderBy(ta => ta.Position)
-                    .Select(ta => ta.Artist.Name)
-                    .ToListAsync();
-
-                result.Add(new TrackPlayCountDto
+                var track = tracksWithArtists.First(t => t.Id == tpc.TrackId);
+                return new TrackPlayCountDto
                 {
                     Id = track.Id,
                     Name = track.Name,
-                    Artists = string.Join(", ", artists),
-                    PlayCount = track.PlayCount,
-                    LastPlayed = track.LastPlayed,
+                    Artists = string.Join(", ", track.TrackArtists.OrderBy(ta => ta.Position).Select(ta => ta.Artist.Name)),
+                    PlayCount = tpc.PlayCount,
+                    LastPlayed = tpc.LastPlayed,
                     DurationMs = track.DurationMs,
                     Popularity = track.Popularity
-                });
-            }
+                };
+            }).ToList();
 
             return result;
         }
@@ -133,7 +140,7 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
             var (startDate, endDate) = GetDateRange(range);
 
             var result = await (
-                from a in _dbContext.Artists
+                from a in _dbContext.Artists.AsNoTracking()
                 join ta in _dbContext.TrackArtists on a.Id equals ta.ArtistId
                 join t in _dbContext.Tracks on ta.TrackId equals t.Id
                 join ph in _dbContext.PlayHistories on t.Id equals ph.TrackId
@@ -168,12 +175,13 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
 
             // This is complex because genres are stored as arrays on artists
             // We need to use raw SQL for the UNNEST operation
+            // Note: Using snake_case column aliases to match EF Core's naming convention
             var sql = @"
                 SELECT
-                    UNNEST(a.genres) as Genre,
-                    COUNT(*) as PlayCount,
-                    COUNT(DISTINCT t.id) as UniqueTrackCount,
-                    COUNT(DISTINCT a.id) as UniqueArtistCount
+                    UNNEST(a.genres) as genre,
+                    COUNT(*)::int as play_count,
+                    COUNT(DISTINCT t.id)::int as unique_track_count,
+                    COUNT(DISTINCT a.id)::int as unique_artist_count
                 FROM play_history ph
                 INNER JOIN tracks t ON ph.track_id = t.id
                 INNER JOIN track_artists ta ON t.id = ta.track_id
@@ -187,7 +195,7 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
 
             sql += @"
                 GROUP BY UNNEST(a.genres)
-                ORDER BY PlayCount DESC
+                ORDER BY play_count DESC
                 LIMIT {0}";
 
             var result = await _dbContext.Database
@@ -207,7 +215,7 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
     {
         try
         {
-            var query = _dbContext.PlayHistories.AsQueryable();
+            var query = _dbContext.PlayHistories.AsNoTracking().AsQueryable();
 
             if (startDate.HasValue)
                 query = query.Where(ph => ph.PlayedAt >= startDate.Value);
@@ -240,7 +248,7 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
         {
             var (startDate, endDate) = GetDateRange(range);
 
-            var query = _dbContext.PlayHistories.AsQueryable();
+            var query = _dbContext.PlayHistories.AsNoTracking().AsQueryable();
             if (startDate.HasValue)
                 query = query.Where(ph => ph.PlayedAt >= startDate.Value);
             if (endDate.HasValue)
@@ -272,7 +280,7 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
         {
             var (startDate, endDate) = GetDateRange(range);
 
-            var query = _dbContext.PlayHistories.AsQueryable();
+            var query = _dbContext.PlayHistories.AsNoTracking().AsQueryable();
             if (startDate.HasValue)
                 query = query.Where(ph => ph.PlayedAt >= startDate.Value);
             if (endDate.HasValue)
@@ -305,7 +313,7 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
         {
             var (startDate, endDate) = GetDateRange(range);
 
-            var query = _dbContext.PlayHistories.AsQueryable();
+            var query = _dbContext.PlayHistories.AsNoTracking().AsQueryable();
             if (startDate.HasValue)
                 query = query.Where(ph => ph.PlayedAt >= startDate.Value);
             if (endDate.HasValue)
@@ -336,38 +344,23 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
         try
         {
             var plays = await _dbContext.PlayHistories
+                .AsNoTracking()
+                .Include(ph => ph.Track)
+                    .ThenInclude(t => t.TrackArtists.OrderBy(ta => ta.Position))
+                        .ThenInclude(ta => ta.Artist)
                 .OrderByDescending(ph => ph.PlayedAt)
                 .Take(count)
-                .Select(ph => new
-                {
-                    ph.Id,
-                    ph.PlayedAt,
-                    TrackName = ph.Track.Name,
-                    ph.ContextType,
-                    ph.Track.DurationMs,
-                    TrackId = ph.Track.Id
-                })
                 .ToListAsync();
 
-            var result = new List<RecentPlayDto>();
-            foreach (var play in plays)
+            var result = plays.Select(ph => new RecentPlayDto
             {
-                var artists = await _dbContext.TrackArtists
-                    .Where(ta => ta.TrackId == play.TrackId)
-                    .OrderBy(ta => ta.Position)
-                    .Select(ta => ta.Artist.Name)
-                    .ToListAsync();
-
-                result.Add(new RecentPlayDto
-                {
-                    Id = play.Id,
-                    PlayedAt = play.PlayedAt,
-                    TrackName = play.TrackName,
-                    Artists = string.Join(", ", artists),
-                    ContextType = play.ContextType,
-                    DurationMs = play.DurationMs
-                });
-            }
+                Id = ph.Track.Id,
+                PlayedAt = ph.PlayedAt,
+                TrackName = ph.Track.Name,
+                Artists = string.Join(", ", ph.Track.TrackArtists.OrderBy(ta => ta.Position).Select(ta => ta.Artist.Name)),
+                ContextType = ph.ContextType,
+                DurationMs = ph.Track.DurationMs
+            }).ToList();
 
             return result;
         }
@@ -417,6 +410,85 @@ public class ListeningAnalyticsService : IListeningAnalyticsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting artist play count for {ArtistId}", artistId);
+            throw;
+        }
+    }
+
+    public async Task<TrackDetailsDto?> GetTrackDetailsAsync(string trackId)
+    {
+        try
+        {
+            var track = await _dbContext.Tracks
+                .AsNoTracking()
+                .Include(t => t.TrackArtists)
+                    .ThenInclude(ta => ta.Artist)
+                .Include(t => t.TrackAlbums)
+                    .ThenInclude(ta => ta.Album)
+                .Include(t => t.AudioFeatures)
+                .FirstOrDefaultAsync(t => t.Id == trackId);
+
+            if (track == null)
+                return null;
+
+            // Get play statistics
+            var playStats = await _dbContext.PlayHistories
+                .AsNoTracking()
+                .Where(ph => ph.TrackId == trackId)
+                .GroupBy(ph => ph.TrackId)
+                .Select(g => new
+                {
+                    PlayCount = g.Count(),
+                    LastPlayed = g.Max(ph => ph.PlayedAt),
+                    FirstPlayed = g.Min(ph => ph.PlayedAt)
+                })
+                .FirstOrDefaultAsync();
+
+            // Get genres from artists
+            var genres = track.TrackArtists
+                .SelectMany(ta => ta.Artist.Genres ?? Array.Empty<string>())
+                .Distinct()
+                .ToList();
+
+            // Get album info
+            var album = track.TrackAlbums.FirstOrDefault()?.Album;
+            var albumImageUrl = album?.ImageUrl;
+
+            return new TrackDetailsDto
+            {
+                Id = track.Id,
+                Name = track.Name,
+                Artists = string.Join(", ", track.TrackArtists.Select(ta => ta.Artist.Name)),
+                AlbumName = album?.Name ?? "Unknown Album",
+                AlbumImageUrl = albumImageUrl,
+                ReleaseDate = album?.ReleaseDate,
+                DurationMs = track.DurationMs,
+                Popularity = track.Popularity,
+                IsExplicit = track.Explicit,
+                SpotifyUrl = $"https://open.spotify.com/track/{track.Id}",
+                PlayCount = playStats?.PlayCount ?? 0,
+                LastPlayed = playStats?.LastPlayed,
+                FirstPlayed = playStats?.FirstPlayed,
+                AudioFeatures = track.AudioFeatures != null ? new AudioFeaturesDto
+                {
+                    Energy = track.AudioFeatures.Energy,
+                    Danceability = track.AudioFeatures.Danceability,
+                    Valence = track.AudioFeatures.Valence,
+                    Acousticness = track.AudioFeatures.Acousticness,
+                    Instrumentalness = track.AudioFeatures.Instrumentalness,
+                    Speechiness = track.AudioFeatures.Speechiness,
+                    Liveness = track.AudioFeatures.Liveness,
+                    Tempo = track.AudioFeatures.Tempo,
+                    Loudness = track.AudioFeatures.Loudness,
+                    Key = track.AudioFeatures.Key,
+                    Mode = track.AudioFeatures.Mode,
+                    TimeSignature = track.AudioFeatures.TimeSignature
+                } : null,
+                Genres = genres
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting track details for {TrackId}", trackId);
             throw;
         }
     }

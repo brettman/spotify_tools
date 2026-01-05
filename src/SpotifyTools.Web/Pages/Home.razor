@@ -6,6 +6,7 @@
 
 @inject IGenreService GenreService
 @inject IPlaylistService PlaylistService
+@inject IListeningAnalyticsService AnalyticsService
 @inject IJSRuntime JS
 @inject ILogger<Home> Logger
 @inject NavigationManager Navigation
@@ -102,7 +103,11 @@
                                                    @onchange="() => ToggleTrackSelection(track.Id)" />
                                             <div class="flex-grow-1">
                                                 <div class="d-flex justify-content-between">
-                                                    <strong>@track.Name</strong>
+                                                    <strong style="cursor: pointer; color: #0d6efd;"
+                                                            @onclick="() => ShowTrackDetails(track.Id)"
+                                                            @onclick:stopPropagation="true">
+                                                        @track.Name
+                                                    </strong>
                                                     <small class="text-muted">@FormatDuration(track.DurationMs)</small>
                                                 </div>
                                                 <div class="text-muted small">
@@ -222,7 +227,11 @@
                                         <div class="list-group-item list-group-item-action small">
                                             <div class="d-flex justify-content-between">
                                                 <div class="flex-grow-1 text-truncate">
-                                                    <div class="fw-bold text-truncate">@track.Name</div>
+                                                    <div class="fw-bold text-truncate"
+                                                         style="cursor: pointer; color: #0d6efd;"
+                                                         @onclick="() => ShowTrackDetails(track.Id)">
+                                                        @track.Name
+                                                    </div>
                                                     <div class="text-muted text-truncate">
                                                         @string.Join(", ", track.Artists.Select(a => a.Name))
                                                     </div>
@@ -269,6 +278,9 @@
     }
 </div>
 
+<!-- Track Details Modal -->
+<TrackDetailsModal Track="selectedTrackDetails" IsVisible="showModal" OnClose="CloseModal" />
+
 @code {
     private List<GenreDto> genres = new();
     private List<TrackDto> tracks = new();
@@ -280,6 +292,10 @@
     private bool isLoading = true;
     private bool loadingTracks = false;
     private bool loadingPlaylist = false;
+
+    // Track details modal state
+    private TrackDetailsDto? selectedTrackDetails;
+    private bool showModal = false;
 
     // Pagination state
     private int currentPage = 1;
@@ -431,5 +447,27 @@
     {
         var duration = TimeSpan.FromMilliseconds(durationMs);
         return $"{(int)duration.TotalMinutes}:{duration.Seconds:D2}";
+    }
+
+    private async Task ShowTrackDetails(string trackId)
+    {
+        try
+        {
+            selectedTrackDetails = await AnalyticsService.GetTrackDetailsAsync(trackId);
+            if (selectedTrackDetails != null)
+            {
+                showModal = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading track details for {TrackId}", trackId);
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        selectedTrackDetails = null;
     }
 }

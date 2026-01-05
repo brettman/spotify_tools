@@ -1,0 +1,234 @@
+@if (Track != null && IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <!-- Header -->
+                <div class="modal-header">
+                    <div class="flex-grow-1">
+                        <h5 class="modal-title mb-1">@Track.Name</h5>
+                        <p class="text-muted small mb-0">@Track.Artists</p>
+                    </div>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+
+                <!-- Body -->
+                <div class="modal-body">
+                    <div class="row">
+                        <!-- Album Art & Basic Info -->
+                        <div class="col-md-4 text-center mb-3">
+                            @if (!string.IsNullOrEmpty(Track.AlbumImageUrl))
+                            {
+                                <img src="@Track.AlbumImageUrl" class="img-fluid rounded shadow mb-3" alt="Album cover" />
+                            }
+                            else
+                            {
+                                <div class="bg-secondary rounded d-flex align-items-center justify-content-center mb-3" style="height: 200px;">
+                                    <span class="text-white">No Image</span>
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(Track.SpotifyUrl))
+                            {
+                                <a href="@Track.SpotifyUrl" target="_blank" class="btn btn-success btn-sm w-100">
+                                    <i class="bi bi-spotify"></i> Open in Spotify
+                                </a>
+                            }
+                        </div>
+
+                        <!-- Details -->
+                        <div class="col-md-8">
+                            <!-- Album Info -->
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Album</h6>
+                                <p class="mb-0">@Track.AlbumName</p>
+                                @if (Track.ReleaseDate.HasValue)
+                                {
+                                    <small class="text-muted">Released: @Track.ReleaseDate.Value.ToString("MMMM d, yyyy")</small>
+                                }
+                            </div>
+
+                            <!-- Basic Stats -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body p-2 text-center">
+                                            <small class="text-muted d-block">Duration</small>
+                                            <strong>@FormatDuration(Track.DurationMs)</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body p-2 text-center">
+                                            <small class="text-muted d-block">Popularity</small>
+                                            <strong>@Track.Popularity/100</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body p-2 text-center">
+                                            <small class="text-muted d-block">Explicit</small>
+                                            <strong>@(Track.IsExplicit ? "Yes" : "No")</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Play Statistics -->
+                            @if (Track.PlayCount > 0)
+                            {
+                                <div class="mb-3">
+                                    <h6 class="text-muted mb-2">Your Listening Stats</h6>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="card bg-primary bg-opacity-10">
+                                                <div class="card-body p-2">
+                                                    <small class="text-muted d-block">Total Plays</small>
+                                                    <strong class="text-primary">@Track.PlayCount</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @if (Track.LastPlayed.HasValue)
+                                        {
+                                            <div class="col-6">
+                                                <div class="card bg-info bg-opacity-10">
+                                                    <div class="card-body p-2">
+                                                        <small class="text-muted d-block">Last Played</small>
+                                                        <strong class="text-info">@Track.LastPlayed.Value.ToString("MMM d, yyyy")</strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Genres -->
+                            @if (Track.Genres != null && Track.Genres.Any())
+                            {
+                                <div class="mb-3">
+                                    <h6 class="text-muted mb-2">Genres</h6>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach (var genre in Track.Genres.Take(10))
+                                        {
+                                            <span class="badge bg-secondary">@genre</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Audio Features -->
+                    @if (Track.AudioFeatures != null)
+                    {
+                        <hr class="my-3" />
+                        <h6 class="text-muted mb-3">Audio Features</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <small class="text-muted">Energy</small>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar bg-danger" style="width: @((Track.AudioFeatures.Energy * 100))%">
+                                        @Track.AudioFeatures.Energy.ToString("P0")
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Danceability</small>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar bg-success" style="width: @((Track.AudioFeatures.Danceability * 100))%">
+                                        @Track.AudioFeatures.Danceability.ToString("P0")
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Valence (Positivity)</small>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar bg-warning" style="width: @((Track.AudioFeatures.Valence * 100))%">
+                                        @Track.AudioFeatures.Valence.ToString("P0")
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Acousticness</small>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar bg-info" style="width: @((Track.AudioFeatures.Acousticness * 100))%">
+                                        @Track.AudioFeatures.Acousticness.ToString("P0")
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Speechiness</small>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar bg-primary" style="width: @((Track.AudioFeatures.Speechiness * 100))%">
+                                        @Track.AudioFeatures.Speechiness.ToString("P0")
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Instrumentalness</small>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar bg-secondary" style="width: @((Track.AudioFeatures.Instrumentalness * 100))%">
+                                        @Track.AudioFeatures.Instrumentalness.ToString("P0")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mt-2">
+                            <div class="col-4">
+                                <small class="text-muted d-block">Tempo</small>
+                                <strong>@Track.AudioFeatures.Tempo.ToString("F0") BPM</strong>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted d-block">Key</small>
+                                <strong>@GetKeyName(Track.AudioFeatures.Key)</strong>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted d-block">Loudness</small>
+                                <strong>@Track.AudioFeatures.Loudness.ToString("F1") dB</strong>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Footer -->
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public TrackDetailsDto? Track { get; set; }
+
+    [Parameter]
+    public bool IsVisible { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private void Close()
+    {
+        OnClose.InvokeAsync();
+    }
+
+    private string FormatDuration(int milliseconds)
+    {
+        var ts = TimeSpan.FromMilliseconds(milliseconds);
+        return ts.Hours > 0
+            ? $"{ts.Hours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{ts.Minutes}:{ts.Seconds:D2}";
+    }
+
+    private string GetKeyName(int key)
+    {
+        var keys = new[] { "C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B" };
+        return key >= 0 && key < keys.Length ? keys[key] : "Unknown";
+    }
+}

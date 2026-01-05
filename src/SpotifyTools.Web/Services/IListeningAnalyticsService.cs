@@ -29,4 +29,7 @@ public interface IListeningAnalyticsService
     // Individual track/artist stats
     Task<int> GetTrackPlayCountAsync(string trackId, TimeRange range = TimeRange.AllTime);
     Task<int> GetArtistPlayCountAsync(string artistId, TimeRange range = TimeRange.AllTime);
+
+    // Track details
+    Task<TrackDetailsDto?> GetTrackDetailsAsync(string trackId);
 }

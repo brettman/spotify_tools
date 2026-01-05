@@ -171,7 +171,12 @@
                                         {
                                             <tr>
                                                 <td class="text-muted">@(index + 1)</td>
-                                                <td><strong>@track.Name</strong></td>
+                                                <td>
+                                                    <strong style="cursor: pointer; color: #0d6efd;"
+                                                            @onclick="() => ShowTrackDetails(track.Id)">
+                                                        @track.Name
+                                                    </strong>
+                                                </td>
                                                 <td class="text-muted">@track.Artists</td>
                                                 <td><span class="badge bg-primary">@track.PlayCount</span></td>
                                                 <td class="text-muted small">@track.LastPlayed.ToString("MMM d, h:mm tt")</td>
@@ -274,6 +279,14 @@
             }
             else if (activeTab == "patterns")
             {
+                <!-- Interactive Charts -->
+                <div class="mb-4">
+                    <ListeningCharts DailyActivity="dailyActivity"
+                                     TopGenres="topGenres"
+                                     HourlyPattern="playsByHour" />
+                </div>
+
+                <!-- Detailed Breakdown -->
                 <div class="row g-3">
                     <!-- Plays by Hour -->
                     <div class="col-md-6">
@@ -363,7 +376,10 @@
                                     <div class="list-group-item">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div>
-                                                <h6 class="mb-1">@play.TrackName</h6>
+                                                <h6 class="mb-1" style="cursor: pointer; color: #0d6efd;"
+                                                    @onclick="() => ShowTrackDetails(play.Id)">
+                                                    @play.TrackName
+                                                </h6>
                                                 <p class="mb-1 text-muted small">@play.Artists</p>
                                                 @if (!string.IsNullOrEmpty(play.ContextType))
                                                 {
@@ -387,6 +403,9 @@
     }
 </div>
 
+<!-- Track Details Modal -->
+<TrackDetailsModal Track="selectedTrack" IsVisible="showModal" OnClose="CloseModal" />
+
 @code {
     private ListeningStatsDto? overallStats;
     private List<TrackPlayCountDto> topTracks = new();
@@ -394,11 +413,16 @@
     private List<GenrePlayCountDto> topGenres = new();
     private List<PlaysByHourDto> playsByHour = new();
     private List<PlaysByDayOfWeekDto> playsByDay = new();
+    private List<PlaysByDateDto> dailyActivity = new();
     private List<RecentPlayDto> recentPlays = new();
 
     private TimeRange selectedRange = TimeRange.AllTime;
     private string activeTab = "tracks";
     private bool isLoading = true;
+
+    // Track details modal state
+    private TrackDetailsDto? selectedTrack;
+    private bool showModal = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -410,24 +434,15 @@
         isLoading = true;
         try
         {
-            // Load all analytics data in parallel for better performance
-            var statsTask = AnalyticsService.GetOverallStatsAsync(selectedRange);
-            var tracksTask = AnalyticsService.GetMostPlayedTracksAsync(50, selectedRange);
-            var artistsTask = AnalyticsService.GetMostPlayedArtistsAsync(50, selectedRange);
-            var genresTask = AnalyticsService.GetMostPlayedGenresAsync(30, selectedRange);
-            var hourTask = AnalyticsService.GetPlaysByHourAsync(selectedRange);
-            var dayTask = AnalyticsService.GetPlaysByDayOfWeekAsync(selectedRange);
-            var recentTask = AnalyticsService.GetRecentPlaysAsync(50);
-
-            await Task.WhenAll(statsTask, tracksTask, artistsTask, genresTask, hourTask, dayTask, recentTask);
-
-            overallStats = await statsTask;
-            topTracks = await tracksTask;
-            topArtists = await artistsTask;
-            topGenres = await genresTask;
-            playsByHour = await hourTask;
-            playsByDay = await dayTask;
-            recentPlays = await recentTask;
+            // Load all analytics data sequentially to avoid DbContext connection conflicts
+            overallStats = await AnalyticsService.GetOverallStatsAsync(selectedRange);
+            topTracks = await AnalyticsService.GetMostPlayedTracksAsync(50, selectedRange);
+            topArtists = await AnalyticsService.GetMostPlayedArtistsAsync(50, selectedRange);
+            topGenres = await AnalyticsService.GetMostPlayedGenresAsync(30, selectedRange);
+            playsByHour = await AnalyticsService.GetPlaysByHourAsync(selectedRange);
+            playsByDay = await AnalyticsService.GetPlaysByDayOfWeekAsync(selectedRange);
+            dailyActivity = await AnalyticsService.GetPlaysByDateAsync();
+            recentPlays = await AnalyticsService.GetRecentPlaysAsync(50);
 
             Logger.LogInformation("Loaded analytics: {TotalPlays} plays, {UniqueTracksCount} unique tracks",
                 overallStats?.TotalPlays ?? 0, overallStats?.UniqueTracksPlayed ?? 0);
@@ -466,5 +481,27 @@
             return $"{(int)timeSpan.TotalHours}h {timeSpan.Minutes}m";
 
         return $"{(int)timeSpan.TotalMinutes}m";
+    }
+
+    private async Task ShowTrackDetails(string trackId)
+    {
+        try
+        {
+            selectedTrack = await AnalyticsService.GetTrackDetailsAsync(trackId);
+            if (selectedTrack != null)
+            {
+                showModal = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading track details for {TrackId}", trackId);
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        selectedTrack = null;
     }
 }

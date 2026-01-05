@@ -120,3 +120,50 @@ public enum TimeRange
     ThisMonth,
     ThisYear
 }
+
+/// <summary>
+/// Comprehensive track details for modal display
+/// </summary>
+public class TrackDetailsDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Artists { get; set; } = string.Empty;
+    public string AlbumName { get; set; } = string.Empty;
+    public string? AlbumImageUrl { get; set; }
+    public DateTime? ReleaseDate { get; set; }
+    public int DurationMs { get; set; }
+    public int Popularity { get; set; }
+    public bool IsExplicit { get; set; }
+    public string? SpotifyUrl { get; set; }
+
+    // Play statistics
+    public int PlayCount { get; set; }
+    public DateTime? LastPlayed { get; set; }
+    public DateTime? FirstPlayed { get; set; }
+
+    // Audio features
+    public AudioFeaturesDto? AudioFeatures { get; set; }
+
+    // Genres
+    public List<string> Genres { get; set; } = new();
+}
+
+/// <summary>
+/// Audio features for a track
+/// </summary>
+public class AudioFeaturesDto
+{
+    public double Energy { get; set; }
+    public double Danceability { get; set; }
+    public double Valence { get; set; }
+    public double Acousticness { get; set; }
+    public double Instrumentalness { get; set; }
+    public double Speechiness { get; set; }
+    public double Liveness { get; set; }
+    public double Tempo { get; set; }
+    public double Loudness { get; set; }
+    public int Key { get; set; }
+    public int Mode { get; set; }
+    public int TimeSignature { get; set; }
+}

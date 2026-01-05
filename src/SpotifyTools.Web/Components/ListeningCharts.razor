@@ -1,0 +1,92 @@
+@using ApexCharts
+
+@if (DailyActivity != null && DailyActivity.Any())
+{
+    <div class="row g-3">
+        <!-- Listening Activity Over Time -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📈 Listening Activity Over Time</h5>
+                </div>
+                <div class="card-body">
+                    <ApexChart TItem="PlaysByDateDto"
+                               Title="Daily Plays"
+                               Height="300">
+                        <ApexPointSeries TItem="PlaysByDateDto"
+                                         Items="DailyActivity.OrderBy(x => x.Date).ToList()"
+                                         Name="Plays"
+                                         SeriesType="SeriesType.Area"
+                                         XValue='@(e => e.Date.ToString("MMM d"))'
+                                         YValue="@(e => (decimal)e.PlayCount)" />
+                    </ApexChart>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Genres Distribution -->
+        @if (TopGenres != null && TopGenres.Any())
+        {
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">🎵 Top Genres</h5>
+                    </div>
+                    <div class="card-body">
+                        <ApexChart TItem="GenrePlayCountDto"
+                                   Title="Genre Distribution"
+                                   Height="300">
+                            <ApexPointSeries TItem="GenrePlayCountDto"
+                                             Items="TopGenres.Take(8).ToList()"
+                                             Name="Plays"
+                                             SeriesType="SeriesType.Donut"
+                                             XValue="@(e => e.Genre)"
+                                             YValue="@(e => (decimal)e.PlayCount)" />
+                        </ApexChart>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Hourly Pattern -->
+        @if (HourlyPattern != null && HourlyPattern.Any())
+        {
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">⏰ Listening by Hour</h5>
+                    </div>
+                    <div class="card-body">
+                        <ApexChart TItem="PlaysByHourDto"
+                                   Title="Plays by Hour of Day"
+                                   Height="300">
+                            <ApexPointSeries TItem="PlaysByHourDto"
+                                             Items="HourlyPattern.OrderBy(x => x.Hour).ToList()"
+                                             Name="Plays"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue='@(e => $"{e.Hour:D2}:00")'
+                                             YValue="@(e => (decimal)e.PlayCount)" />
+                        </ApexChart>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <p class="mb-0">No data available for visualizations yet. Charts will appear once you have listening history data.</p>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public List<PlaysByDateDto>? DailyActivity { get; set; }
+
+    [Parameter]
+    public List<GenrePlayCountDto>? TopGenres { get; set; }
+
+    [Parameter]
+    public List<PlaysByHourDto>? HourlyPattern { get; set; }
+}
