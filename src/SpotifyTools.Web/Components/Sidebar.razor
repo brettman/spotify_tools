@@ -1,0 +1,101 @@
+@inject NavigationManager Navigation
+
+<aside class="spotify-sidebar @(IsOpen ? "open" : "")">
+    <!-- Logo -->
+    <div class="spotify-sidebar-logo">
+        <h1>
+            <span class="logo-icon">🎵</span>
+            Spotify Tools
+        </h1>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="spotify-sidebar-nav">
+        <!-- Main Navigation -->
+        <div class="spotify-sidebar-section">
+            <a href="/start" class="spotify-sidebar-item @(IsActive("/start") ? "active" : "")" @onclick="OnNavigate">
+                <span class="spotify-sidebar-item-icon">
+                    <i class="bi bi-house-door"></i>
+                </span>
+                <span class="spotify-sidebar-item-text">Home</span>
+            </a>
+
+            <a href="/library" class="spotify-sidebar-item @(IsActive("/library") ? "active" : "")" @onclick="OnNavigate">
+                <span class="spotify-sidebar-item-icon">
+                    <i class="bi bi-collection"></i>
+                </span>
+                <span class="spotify-sidebar-item-text">Library</span>
+            </a>
+
+            <a href="/analytics" class="spotify-sidebar-item @(IsActive("/analytics") ? "active" : "")" @onclick="OnNavigate">
+                <span class="spotify-sidebar-item-icon">
+                    <i class="bi bi-graph-up"></i>
+                </span>
+                <span class="spotify-sidebar-item-text">Analytics</span>
+            </a>
+        </div>
+
+        <!-- Playlists Section -->
+        <div class="spotify-sidebar-section">
+            <div class="spotify-sidebar-section-title">Playlists</div>
+            <div class="spotify-sidebar-item" style="opacity: 0.5; cursor: default;">
+                <span class="spotify-sidebar-item-icon">
+                    <i class="bi bi-music-note-list"></i>
+                </span>
+                <span class="spotify-sidebar-item-text">Coming Soon</span>
+            </div>
+        </div>
+    </nav>
+</aside>
+
+<!-- Mobile Overlay -->
+<div class="spotify-sidebar-overlay" @onclick="OnOverlayClick"></div>
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string CurrentPath => Navigation.Uri;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        StateHasChanged();
+    }
+
+    private bool IsActive(string path)
+    {
+        var currentPath = new Uri(Navigation.Uri).AbsolutePath;
+        if (path == "/start")
+        {
+            return currentPath == "/" || currentPath == "/start";
+        }
+        return currentPath.StartsWith(path, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task OnNavigate()
+    {
+        // Close sidebar on mobile after navigation
+        if (IsOpen)
+        {
+            await IsOpenChanged.InvokeAsync(false);
+        }
+    }
+
+    private async Task OnOverlayClick()
+    {
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

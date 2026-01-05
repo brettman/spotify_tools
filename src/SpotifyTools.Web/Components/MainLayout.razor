@@ -1,5 +1,18 @@
 @inherits LayoutComponentBase
 
-<div>
-    @Body
+<div class="spotify-layout">
+    <Sidebar IsOpen="@sidebarOpen" IsOpenChanged="@OnSidebarToggle" />
+    <TopBar OnToggleSidebar="@OnSidebarToggle" />
+    <main class="spotify-main">
+        @Body
+    </main>
 </div>
+
+@code {
+    private bool sidebarOpen = false;
+
+    private void OnSidebarToggle()
+    {
+        sidebarOpen = !sidebarOpen;
+    }
+}

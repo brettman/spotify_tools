@@ -1,0 +1,45 @@
+@inject NavigationManager Navigation
+
+<header class="spotify-topbar">
+    <div class="spotify-topbar-left">
+        <!-- Mobile Sidebar Toggle -->
+        <button class="spotify-sidebar-toggle" @onclick="ToggleSidebar">
+            <i class="bi bi-list"></i>
+        </button>
+
+        <!-- Page Title/Breadcrumb -->
+        <div class="spotify-topbar-breadcrumb">
+            @GetPageTitle()
+        </div>
+    </div>
+
+    <div class="spotify-topbar-right">
+        @ChildContent
+    </div>
+</header>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleSidebar { get; set; }
+
+    private async Task ToggleSidebar()
+    {
+        await OnToggleSidebar.InvokeAsync();
+    }
+
+    private string GetPageTitle()
+    {
+        var path = new Uri(Navigation.Uri).AbsolutePath;
+        return path switch
+        {
+            "/" => "Home",
+            "/start" => "Home",
+            "/library" => "Library",
+            "/analytics" => "Analytics",
+            _ => "Spotify Tools"
+        };
+    }
+}

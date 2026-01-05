@@ -1,0 +1,348 @@
+/* Spotify-Like Theme - Layout Styles */
+
+/* ==================== Main Layout Container ==================== */
+.spotify-layout {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    background-color: var(--spotify-base);
+}
+
+/* ==================== Sidebar ==================== */
+.spotify-sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    background-color: var(--spotify-black);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-base);
+}
+
+.spotify-sidebar-logo {
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.spotify-sidebar-logo h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.spotify-sidebar-logo .logo-icon {
+    color: var(--spotify-green);
+    font-size: 28px;
+}
+
+.spotify-sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-md) 0;
+}
+
+.spotify-sidebar-section {
+    margin-bottom: var(--space-lg);
+}
+
+.spotify-sidebar-section-title {
+    padding: var(--space-sm) var(--space-lg);
+    color: var(--text-subdued);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.spotify-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-lg);
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.spotify-sidebar-item:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.spotify-sidebar-item.active {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: var(--spotify-green);
+}
+
+.spotify-sidebar-item-icon {
+    font-size: 20px;
+    width: 24px;
+    text-align: center;
+}
+
+.spotify-sidebar-item-text {
+    flex: 1;
+}
+
+/* ==================== Top Bar ==================== */
+.spotify-topbar {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width);
+    right: 0;
+    height: var(--topbar-height);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, rgba(18, 18, 18, 0) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-lg);
+    z-index: 90;
+}
+
+.spotify-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.spotify-topbar-breadcrumb {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.spotify-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+/* ==================== Main Content Area ==================== */
+.spotify-main {
+    margin-left: var(--sidebar-width);
+    margin-top: var(--topbar-height);
+    width: calc(100% - var(--sidebar-width));
+    height: calc(100vh - var(--topbar-height));
+    overflow-y: auto;
+    padding: var(--space-lg);
+    background-color: var(--spotify-base);
+}
+
+/* ==================== Responsive - Tablet ==================== */
+@media (max-width: 992px) {
+    .spotify-sidebar {
+        transform: translateX(-100%);
+        transition: transform var(--transition-base);
+    }
+
+    .spotify-sidebar.open {
+        transform: translateX(0);
+    }
+
+    .spotify-topbar {
+        left: 0;
+    }
+
+    .spotify-main {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .spotify-sidebar-toggle {
+        display: block;
+    }
+}
+
+/* ==================== Responsive - Mobile ==================== */
+@media (max-width: 768px) {
+    .spotify-topbar {
+        height: 56px;
+        padding: 0 var(--space-md);
+    }
+
+    .spotify-main {
+        margin-top: 56px;
+        height: calc(100vh - 56px);
+        padding: var(--space-md);
+    }
+
+    .spotify-topbar-breadcrumb {
+        font-size: 16px;
+    }
+
+    .spotify-sidebar {
+        width: 280px;
+    }
+
+    /* Mobile overlay */
+    .spotify-sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.8);
+        z-index: 99;
+        display: none;
+    }
+
+    .spotify-sidebar.open + .spotify-sidebar-overlay {
+        display: block;
+    }
+}
+
+/* ==================== Sidebar Toggle Button (Mobile) ==================== */
+.spotify-sidebar-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 24px;
+    cursor: pointer;
+    padding: var(--space-sm);
+    border-radius: var(--radius-small);
+    transition: background-color var(--transition-fast);
+}
+
+.spotify-sidebar-toggle:hover {
+    background-color: var(--spotify-highlight);
+}
+
+@media (max-width: 992px) {
+    .spotify-sidebar-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+/* ==================== Content Grid (for pages) ==================== */
+.spotify-content-header {
+    margin-bottom: var(--space-lg);
+}
+
+.spotify-content-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+}
+
+.spotify-content-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* ==================== Hero Section ==================== */
+.spotify-hero {
+    background: linear-gradient(to bottom, rgba(29, 185, 84, 0.3) 0%, rgba(18, 18, 18, 0) 100%);
+    padding: var(--space-2xl) 0;
+    margin-bottom: var(--space-xl);
+    border-radius: var(--radius-large);
+}
+
+.spotify-hero-title {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: var(--space-md);
+    text-align: center;
+}
+
+.spotify-hero-subtitle {
+    font-size: 18px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: var(--space-lg);
+}
+
+/* ==================== Grid Utilities ==================== */
+.spotify-grid {
+    display: grid;
+    gap: var(--space-lg);
+}
+
+.spotify-grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.spotify-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.spotify-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 992px) {
+    .spotify-grid-3,
+    .spotify-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 576px) {
+    .spotify-grid-2,
+    .spotify-grid-3,
+    .spotify-grid-4 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==================== Page Sections ==================== */
+.spotify-section {
+    margin-bottom: var(--space-xl);
+}
+
+.spotify-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-lg);
+}
+
+.spotify-section-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.spotify-section-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+/* ==================== Back Button ==================== */
+.spotify-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background-color: rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+    border: none;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+}
+
+.spotify-back-btn:hover {
+    background-color: rgba(0, 0, 0, 0.7);
+    transform: translateX(-2px);
+}
