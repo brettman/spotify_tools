@@ -3,6 +3,7 @@ using Serilog;
 using SpotifyClientService;
 using SpotifyTools.Data.DbContext;
 using SpotifyTools.Data.Repositories;
+using SpotifyTools.Data.Repositories.Implementations;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.PlaybackWorker;
 using SpotifyTools.Sync;
