@@ -24,6 +24,7 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
     public DbSet<SpotifyToken> SpotifyTokens => Set<SpotifyToken>();
     public DbSet<SyncHistory> SyncHistory => Set<SyncHistory>();
     public DbSet<SyncState> SyncStates => Set<SyncState>();
+    public DbSet<RateLimitState> RateLimitStates => Set<RateLimitState>();
     public DbSet<AudioAnalysis> AudioAnalyses => Set<AudioAnalysis>();
     public DbSet<AudioAnalysisSection> AudioAnalysisSections => Set<AudioAnalysisSection>();
     public DbSet<SavedCluster> SavedClusters => Set<SavedCluster>();

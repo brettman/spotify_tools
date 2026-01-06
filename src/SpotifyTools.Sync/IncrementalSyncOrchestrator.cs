@@ -3,6 +3,7 @@ using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Domain.Entities;
 using SpotifyTools.Domain.Enums;
 using SpotifyTools.Sync.Models;
+using SpotifyTools.Sync.Services;
 
 namespace SpotifyTools.Sync;
 
@@ -14,6 +15,7 @@ public class IncrementalSyncOrchestrator
 {
     private readonly ISyncService _syncService;
     private readonly ISyncStateRepository _syncStateRepository;
+    private readonly IRateLimitTracker _rateLimitTracker;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<IncrementalSyncOrchestrator> _logger;
 
@@ -28,11 +30,13 @@ public class IncrementalSyncOrchestrator
     public IncrementalSyncOrchestrator(
         ISyncService syncService,
         ISyncStateRepository syncStateRepository,
+        IRateLimitTracker rateLimitTracker,
         IUnitOfWork unitOfWork,
         ILogger<IncrementalSyncOrchestrator> logger)
     {
         _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
         _syncStateRepository = syncStateRepository ?? throw new ArgumentNullException(nameof(syncStateRepository));
+        _rateLimitTracker = rateLimitTracker ?? throw new ArgumentNullException(nameof(rateLimitTracker));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }

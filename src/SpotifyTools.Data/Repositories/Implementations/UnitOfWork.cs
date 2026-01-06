@@ -27,6 +27,8 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<AudioAnalysisSection>? _audioAnalysisSections;
     private ISavedClusterRepository? _savedClusters;
     private ITrackExclusionRepository? _trackExclusions;
+    private IRepository<SyncState>? _syncStates;
+    private IRepository<RateLimitState>? _rateLimitStates;
 
     public UnitOfWork(DbContext.SpotifyDbContext context)
     {
@@ -47,6 +49,8 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<AudioAnalysisSection> AudioAnalysisSections => _audioAnalysisSections ??= new Repository<AudioAnalysisSection>(_context);
     public ISavedClusterRepository SavedClusters => _savedClusters ??= new SavedClusterRepository(_context);
     public ITrackExclusionRepository TrackExclusions => _trackExclusions ??= new TrackExclusionRepository(_context);
+    public IRepository<SyncState> SyncStates => _syncStates ??= new Repository<SyncState>(_context);
+    public IRepository<RateLimitState> RateLimitStates => _rateLimitStates ??= new Repository<RateLimitState>(_context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

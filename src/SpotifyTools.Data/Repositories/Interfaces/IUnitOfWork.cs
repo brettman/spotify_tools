@@ -22,6 +22,8 @@ public interface IUnitOfWork : IDisposable
     IRepository<AudioAnalysisSection> AudioAnalysisSections { get; }
     ISavedClusterRepository SavedClusters { get; }
     ITrackExclusionRepository TrackExclusions { get; }
+    IRepository<SyncState> SyncStates { get; }
+    IRepository<RateLimitState> RateLimitStates { get; }
 
     /// <summary>
     /// Save all changes to the database
