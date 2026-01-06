@@ -5,16 +5,20 @@ A standalone background service that continuously tracks your Spotify listening 
 ## Features
 
 - **Autonomous Operation**: Runs independently as a system daemon/service
+- **Self-Authenticating**: Automatically handles Spotify OAuth on first run
 - **Automatic Polling**: Fetches recently played tracks every 10 minutes (configurable)
+- **Token Management**: Stores and refreshes OAuth tokens automatically
 - **Error Handling**: Tracks consecutive errors and raises alerts after threshold
 - **Persistent Logging**: Logs to both console and rotating log files
 - **Self-Recovery**: Automatically restarts on failure with configurable restart policy
 
 ## Prerequisites
 
-1. **Authenticated Spotify Account**: Run the CLI app or Web app once to authenticate
-2. **PostgreSQL**: Database must be running and accessible
-3. **.NET 8 Runtime**: Required to run the service
+1. **PostgreSQL**: Database must be running and accessible
+2. **.NET 8 Runtime**: Required to run the service
+3. **Spotify Developer App**: ClientId and ClientSecret configured in appsettings.json
+
+**Note:** No manual authentication required! The service will authenticate itself on first run.
 
 ## Configuration
 
@@ -27,7 +31,8 @@ Edit `appsettings.json` to configure:
   },
   "Spotify": {
     "ClientId": "your-client-id",
-    "ClientSecret": "your-client-secret"
+    "ClientSecret": "your-client-secret",
+    "RedirectUri": "http://127.0.0.1:5009/callback"
   },
   "PlaybackTracking": {
     "PollingIntervalMinutes": 10,
@@ -35,6 +40,36 @@ Edit `appsettings.json` to configure:
     "MaxConsecutiveErrors": 5
   }
 }
+```
+
+## First Run - Authentication
+
+**On the very first run**, the service will:
+
+1. Detect that no OAuth token exists
+2. Print authentication instructions to console/log
+3. Open your default browser automatically
+4. Wait for you to authorize the application
+5. Save the refresh token to the database
+6. Continue running normally
+
+**On subsequent runs**, the service uses the stored refresh token automatically - no browser required!
+
+### Interactive Authentication Example
+
+```
+═══════════════════════════════════════════════════════════
+  SPOTIFY AUTHENTICATION REQUIRED
+═══════════════════════════════════════════════════════════
+
+This service needs to authenticate with Spotify.
+A browser window will open automatically.
+
+✓ Authentication successful!
+✓ Refresh token saved to database
+✓ Future runs will authenticate automatically
+
+═══════════════════════════════════════════════════════════
 ```
 
 ## Installation

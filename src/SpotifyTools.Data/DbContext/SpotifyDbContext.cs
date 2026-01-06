@@ -23,6 +23,7 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
     public DbSet<PlaylistTrack> PlaylistTracks => Set<PlaylistTrack>();
     public DbSet<SpotifyToken> SpotifyTokens => Set<SpotifyToken>();
     public DbSet<SyncHistory> SyncHistory => Set<SyncHistory>();
+    public DbSet<SyncState> SyncStates => Set<SyncState>();
     public DbSet<AudioAnalysis> AudioAnalyses => Set<AudioAnalysis>();
     public DbSet<AudioAnalysisSection> AudioAnalysisSections => Set<AudioAnalysisSection>();
     public DbSet<SavedCluster> SavedClusters => Set<SavedCluster>();
@@ -242,6 +243,23 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.HasIndex(e => e.StartedAt);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.SyncType);
+        });
+
+        // SyncState configuration
+        modelBuilder.Entity<SyncState>(entity =>
+        {
+            entity.ToTable("sync_states");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.EntityType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Phase).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+
+            // Unique constraint on (EntityType, Phase) - only one active sync per entity per phase
+            entity.HasIndex(e => new { e.EntityType, e.Phase }).IsUnique();
+
+            entity.HasIndex(e => e.IsComplete);
+            entity.HasIndex(e => e.RateLimitResetAt);
         });
 
         // SavedCluster configuration
