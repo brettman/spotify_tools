@@ -4,6 +4,7 @@ using SpotifyClientService;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Domain.Entities;
 using SpotifyTools.Domain.Enums;
+using SpotifyTools.Sync.Models;
 using System.Net;
 
 namespace SpotifyTools.Sync;
@@ -1524,6 +1525,409 @@ public class SyncService : ISyncService
                 break;
         }
     }
+
+    #region Batched Sync Methods
+
+    public async Task<BatchSyncResult> SyncTracksBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new BatchSyncResult
+        {
+            NextOffset = offset
+        };
+
+        try
+        {
+            await _rateLimiter.WaitAsync();
+
+            _logger.LogInformation("Syncing tracks batch: offset {Offset}, size {BatchSize}", offset, batchSize);
+
+            var savedTracks = await _spotifyClient.Client.Library.GetTracks(
+                new LibraryTracksRequest { Limit = batchSize, Offset = offset },
+                cancellationToken);
+
+            if (savedTracks == null || savedTracks.Items == null)
+            {
+                result.ErrorMessage = "Failed to fetch tracks from Spotify API";
+                return result;
+            }
+
+            result.TotalEstimated = savedTracks.Total;
+            result.ItemsProcessed = savedTracks.Items.Count;
+            result.HasMore = offset + savedTracks.Items.Count < savedTracks.Total;
+            result.NextOffset = offset + savedTracks.Items.Count;
+
+            var now = DateTime.UtcNow;
+            var newItems = 0;
+            var updatedItems = 0;
+
+            foreach (var savedTrack in savedTracks.Items)
+            {
+                if (savedTrack?.Track == null) continue;
+
+                var track = new Track
+                {
+                    Id = savedTrack.Track.Id,
+                    Name = savedTrack.Track.Name,
+                    DurationMs = savedTrack.Track.DurationMs,
+                    Explicit = savedTrack.Track.Explicit,
+                    Popularity = savedTrack.Track.Popularity,
+                    Isrc = savedTrack.Track.ExternalIds?.TryGetValue("isrc", out var isrc) == true ? isrc : null,
+                    AddedAt = savedTrack.AddedAt,
+                    FirstSyncedAt = now,
+                    LastSyncedAt = now
+                };
+
+                var existingTrack = await _unitOfWork.Tracks.GetByIdAsync(track.Id);
+                if (existingTrack == null)
+                {
+                    await _unitOfWork.Tracks.AddAsync(track);
+                    newItems++;
+                }
+                else
+                {
+                    existingTrack.Name = track.Name;
+                    existingTrack.DurationMs = track.DurationMs;
+                    existingTrack.Explicit = track.Explicit;
+                    existingTrack.Popularity = track.Popularity;
+                    existingTrack.Isrc = track.Isrc;
+                    existingTrack.LastSyncedAt = now;
+                    _unitOfWork.Tracks.Update(existingTrack);
+                    updatedItems++;
+                }
+
+                // Create stub artist records (minimal data - will be enriched in artist sync)
+                foreach (var artist in savedTrack.Track.Artists)
+                {
+                    var existingArtist = await _unitOfWork.Artists.GetByIdAsync(artist.Id);
+                    if (existingArtist == null)
+                    {
+                        var stubArtist = new Artist
+                        {
+                            Id = artist.Id,
+                            Name = artist.Name,
+                            Genres = Array.Empty<string>(),
+                            Popularity = 0,
+                            Followers = 0,
+                            FirstSyncedAt = now,
+                            LastSyncedAt = now
+                        };
+                        await _unitOfWork.Artists.AddAsync(stubArtist);
+                    }
+                }
+
+                // Create stub album record
+                if (savedTrack.Track.Album != null)
+                {
+                    var existingAlbum = await _unitOfWork.Albums.GetByIdAsync(savedTrack.Track.Album.Id);
+                    if (existingAlbum == null)
+                    {
+                        var stubAlbum = new Album
+                        {
+                            Id = savedTrack.Track.Album.Id,
+                            Name = savedTrack.Track.Album.Name,
+                            AlbumType = savedTrack.Track.Album.AlbumType,
+                            ReleaseDate = ParseReleaseDate(savedTrack.Track.Album.ReleaseDate),
+                            TotalTracks = savedTrack.Track.Album.TotalTracks,
+                            FirstSyncedAt = now,
+                            LastSyncedAt = now
+                        };
+                        await _unitOfWork.Albums.AddAsync(stubAlbum);
+                    }
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            result.NewItemsAdded = newItems;
+            result.ItemsUpdated = updatedItems;
+
+            progressCallback?.Invoke(result.NextOffset, result.TotalEstimated ?? 0);
+
+            _logger.LogInformation(
+                "Tracks batch complete: {New} new, {Updated} updated, {Total} processed",
+                newItems, updatedItems, result.ItemsProcessed);
+
+            return result;
+        }
+        catch (APITooManyRequestsException ex)
+        {
+            result.RateLimited = true;
+            result.RateLimitResetAt = DateTime.UtcNow.AddHours(24); // Default to 24 hours
+            _logger.LogWarning("Rate limit hit during tracks batch sync");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing tracks batch at offset {Offset}", offset);
+            result.ErrorMessage = ex.Message;
+            return result;
+        }
+    }
+
+    public async Task<BatchSyncResult> SyncArtistsBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new BatchSyncResult { NextOffset = offset };
+
+        try
+        {
+            // Get all artists that need enrichment (stub records with no genres)
+            var allArtists = await _unitOfWork.Artists.GetAllAsync();
+            var stubArtists = allArtists
+                .Where(a => a.Genres == null || a.Genres.Length == 0)
+                .OrderBy(a => a.Id)
+                .Skip(offset)
+                .Take(batchSize)
+                .ToList();
+
+            result.TotalEstimated = allArtists.Count(a => a.Genres == null || a.Genres.Length == 0);
+            result.ItemsProcessed = stubArtists.Count;
+            result.HasMore = offset + stubArtists.Count < result.TotalEstimated;
+            result.NextOffset = offset + stubArtists.Count;
+
+            if (!stubArtists.Any())
+            {
+                return result;
+            }
+
+            // Fetch full artist details in batches of 50 (Spotify API limit)
+            var artistIds = stubArtists.Select(a => a.Id).ToList();
+            var now = DateTime.UtcNow;
+            var updatedCount = 0;
+
+            for (int i = 0; i < artistIds.Count; i += 50)
+            {
+                await _rateLimiter.WaitAsync();
+
+                var batchIds = artistIds.Skip(i).Take(50).ToList();
+                var artistsResponse = await _spotifyClient.Client.Artists.GetSeveral(
+                    new ArtistsRequest(batchIds),
+                    cancellationToken);
+
+                foreach (var fullArtist in artistsResponse.Artists)
+                {
+                    var artist = stubArtists.First(a => a.Id == fullArtist.Id);
+                    artist.Name = fullArtist.Name;
+                    artist.Genres = fullArtist.Genres?.ToArray() ?? Array.Empty<string>();
+                    artist.Popularity = fullArtist.Popularity;
+                    artist.Followers = fullArtist.Followers?.Total ?? 0;
+                    artist.LastSyncedAt = now;
+
+                    _unitOfWork.Artists.Update(artist);
+                    updatedCount++;
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            result.ItemsUpdated = updatedCount;
+            progressCallback?.Invoke(result.NextOffset, result.TotalEstimated ?? 0);
+
+            _logger.LogInformation(
+                "Artists batch complete: {Updated} enriched, {Total} processed",
+                updatedCount, result.ItemsProcessed);
+
+            return result;
+        }
+        catch (APITooManyRequestsException)
+        {
+            result.RateLimited = true;
+            result.RateLimitResetAt = DateTime.UtcNow.AddHours(24);
+            _logger.LogWarning("Rate limit hit during artists batch sync");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing artists batch at offset {Offset}", offset);
+            result.ErrorMessage = ex.Message;
+            return result;
+        }
+    }
+
+    public async Task<BatchSyncResult> SyncAlbumsBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new BatchSyncResult { NextOffset = offset };
+
+        try
+        {
+            // Get all albums that need enrichment (stub records with no label)
+            var allAlbums = await _unitOfWork.Albums.GetAllAsync();
+            var stubAlbums = allAlbums
+                .Where(a => string.IsNullOrEmpty(a.Label))
+                .OrderBy(a => a.Id)
+                .Skip(offset)
+                .Take(batchSize)
+                .ToList();
+
+            result.TotalEstimated = allAlbums.Count(a => string.IsNullOrEmpty(a.Label));
+            result.ItemsProcessed = stubAlbums.Count;
+            result.HasMore = offset + stubAlbums.Count < result.TotalEstimated;
+            result.NextOffset = offset + stubAlbums.Count;
+
+            if (!stubAlbums.Any())
+            {
+                return result;
+            }
+
+            // Fetch full album details in batches of 20 (Spotify API limit)
+            var albumIds = stubAlbums.Select(a => a.Id).ToList();
+            var now = DateTime.UtcNow;
+            var updatedCount = 0;
+
+            for (int i = 0; i < albumIds.Count; i += 20)
+            {
+                await _rateLimiter.WaitAsync();
+
+                var batchIds = albumIds.Skip(i).Take(20).ToList();
+                var albumsResponse = await _spotifyClient.Client.Albums.GetSeveral(
+                    new AlbumsRequest(batchIds),
+                    cancellationToken);
+
+                foreach (var fullAlbum in albumsResponse.Albums)
+                {
+                    var album = stubAlbums.First(a => a.Id == fullAlbum.Id);
+                    album.Name = fullAlbum.Name;
+                    album.Label = fullAlbum.Label;
+                    album.AlbumType = fullAlbum.AlbumType;
+                    album.ReleaseDate = ParseReleaseDate(fullAlbum.ReleaseDate);
+                    album.TotalTracks = fullAlbum.TotalTracks;
+                    album.LastSyncedAt = now;
+
+                    _unitOfWork.Albums.Update(album);
+                    updatedCount++;
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            result.ItemsUpdated = updatedCount;
+            progressCallback?.Invoke(result.NextOffset, result.TotalEstimated ?? 0);
+
+            _logger.LogInformation(
+                "Albums batch complete: {Updated} enriched, {Total} processed",
+                updatedCount, result.ItemsProcessed);
+
+            return result;
+        }
+        catch (APITooManyRequestsException)
+        {
+            result.RateLimited = true;
+            result.RateLimitResetAt = DateTime.UtcNow.AddHours(24);
+            _logger.LogWarning("Rate limit hit during albums batch sync");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing albums batch at offset {Offset}", offset);
+            result.ErrorMessage = ex.Message;
+            return result;
+        }
+    }
+
+    public async Task<BatchSyncResult> SyncPlaylistsBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new BatchSyncResult { NextOffset = offset };
+
+        try
+        {
+            await _rateLimiter.WaitAsync();
+
+            var playlists = await _spotifyClient.Client.Playlists.CurrentUsers(
+                new PlaylistCurrentUsersRequest { Limit = batchSize, Offset = offset },
+                cancellationToken);
+
+            if (playlists == null || playlists.Items == null)
+            {
+                result.ErrorMessage = "Failed to fetch playlists from Spotify API";
+                return result;
+            }
+
+            result.TotalEstimated = playlists.Total;
+            result.ItemsProcessed = playlists.Items.Count;
+            result.HasMore = offset + playlists.Items.Count < playlists.Total;
+            result.NextOffset = offset + playlists.Items.Count;
+
+            var now = DateTime.UtcNow;
+            var newItems = 0;
+            var updatedItems = 0;
+
+            foreach (var playlist in playlists.Items)
+            {
+                var existingPlaylist = await _unitOfWork.Playlists.GetByIdAsync(playlist.Id);
+
+                if (existingPlaylist == null)
+                {
+                    var newPlaylist = new Playlist
+                    {
+                        Id = playlist.Id,
+                        Name = playlist.Name,
+                        Description = playlist.Description,
+                        IsPublic = playlist.Public ?? false,
+                        SnapshotId = playlist.SnapshotId,
+                        OwnerId = playlist.Owner?.Id ?? "",
+                        FirstSyncedAt = now,
+                        LastSyncedAt = now
+                    };
+                    await _unitOfWork.Playlists.AddAsync(newPlaylist);
+                    newItems++;
+                }
+                else
+                {
+                    existingPlaylist.Name = playlist.Name;
+                    existingPlaylist.Description = playlist.Description;
+                    existingPlaylist.IsPublic = playlist.Public ?? false;
+                    existingPlaylist.SnapshotId = playlist.SnapshotId;
+                    existingPlaylist.OwnerId = playlist.Owner?.Id ?? "";
+                    existingPlaylist.LastSyncedAt = now;
+
+                    _unitOfWork.Playlists.Update(existingPlaylist);
+                    updatedItems++;
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            result.NewItemsAdded = newItems;
+            result.ItemsUpdated = updatedItems;
+            progressCallback?.Invoke(result.NextOffset, result.TotalEstimated ?? 0);
+
+            _logger.LogInformation(
+                "Playlists batch complete: {New} new, {Updated} updated, {Total} processed",
+                newItems, updatedItems, result.ItemsProcessed);
+
+            return result;
+        }
+        catch (APITooManyRequestsException)
+        {
+            result.RateLimited = true;
+            result.RateLimitResetAt = DateTime.UtcNow.AddHours(24);
+            _logger.LogWarning("Rate limit hit during playlists batch sync");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing playlists batch at offset {Offset}", offset);
+            result.ErrorMessage = ex.Message;
+            return result;
+        }
+    }
+
+    #endregion
 
     private void OnProgressChanged(string stage, int current, int total, string message)
     {

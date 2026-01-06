@@ -1,4 +1,5 @@
 using SpotifyTools.Domain.Enums;
+using SpotifyTools.Sync.Models;
 
 namespace SpotifyTools.Sync;
 
@@ -50,6 +51,48 @@ public interface ISyncService
     /// Syncs only playlists (for partial sync)
     /// </summary>
     Task<int> SyncPlaylistsOnlyAsync(CancellationToken cancellationToken = default);
+
+    // New batched sync methods for incremental/resumable syncing
+
+    /// <summary>
+    /// Syncs a batch of saved tracks
+    /// </summary>
+    /// <param name="offset">Starting offset for pagination</param>
+    /// <param name="batchSize">Number of items to fetch in this batch</param>
+    /// <param name="progressCallback">Optional callback for progress updates (current, total)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<BatchSyncResult> SyncTracksBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Syncs a batch of artists
+    /// </summary>
+    Task<BatchSyncResult> SyncArtistsBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Syncs a batch of albums
+    /// </summary>
+    Task<BatchSyncResult> SyncAlbumsBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Syncs a batch of playlists
+    /// </summary>
+    Task<BatchSyncResult> SyncPlaylistsBatchAsync(
+        int offset,
+        int batchSize,
+        Action<int, int>? progressCallback = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Progress event for sync operations
