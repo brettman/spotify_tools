@@ -1,5 +1,7 @@
 namespace SpotifyTools.Domain.Entities;
 
+using SpotifyTools.Domain.Enums;
+
 /// <summary>
 /// Tracks the state of ongoing sync operations with resumable checkpoints
 /// </summary>
@@ -11,34 +13,39 @@ public class SyncState
     public int Id { get; set; }
 
     /// <summary>
+    /// Unique state key (e.g., "sync_123_tracks")
+    /// </summary>
+    public string StateKey { get; set; } = string.Empty;
+
+    /// <summary>
     /// Type of entity being synced (tracks, artists, albums, playlists)
     /// </summary>
     public string EntityType { get; set; } = string.Empty;
 
     /// <summary>
-    /// Sync phase (initial_sync, incremental_sync)
+    /// Current pagination offset
     /// </summary>
-    public string Phase { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Last successfully synced offset/index
-    /// </summary>
-    public int LastSyncedOffset { get; set; } = 0;
+    public int CurrentOffset { get; set; } = 0;
 
     /// <summary>
     /// Total estimated entities to sync (updated as we learn the real count)
     /// </summary>
-    public int TotalEstimated { get; set; } = 0;
+    public int? TotalItems { get; set; }
 
     /// <summary>
-    /// Whether this entity type has completed syncing
+    /// Number of items processed so far
     /// </summary>
-    public bool IsComplete { get; set; } = false;
+    public int ItemsProcessed { get; set; } = 0;
 
     /// <summary>
-    /// When rate limit was hit (null if not currently rate limited)
+    /// Current status of this sync phase
     /// </summary>
-    public DateTime? RateLimitHitAt { get; set; }
+    public SyncStatus Status { get; set; } = SyncStatus.InProgress;
+
+    /// <summary>
+    /// Last error message if sync failed
+    /// </summary>
+    public string? LastError { get; set; }
 
     /// <summary>
     /// When rate limit will reset (null if not rate limited)
@@ -46,27 +53,17 @@ public class SyncState
     public DateTime? RateLimitResetAt { get; set; }
 
     /// <summary>
-    /// Remaining API calls before rate limit (from X-RateLimit-Remaining header)
-    /// </summary>
-    public int? RateLimitRemaining { get; set; }
-
-    /// <summary>
     /// When this sync state was first created
     /// </summary>
-    public DateTime StartedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
 
     /// <summary>
     /// Last time this sync state was updated
     /// </summary>
-    public DateTime LastUpdatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 
     /// <summary>
     /// When this entity type completed syncing (null if incomplete)
     /// </summary>
     public DateTime? CompletedAt { get; set; }
-
-    /// <summary>
-    /// Error message if sync failed
-    /// </summary>
-    public string? ErrorMessage { get; set; }
 }

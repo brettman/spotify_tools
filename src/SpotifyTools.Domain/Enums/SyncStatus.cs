@@ -23,5 +23,15 @@ public enum SyncStatus
     /// <summary>
     /// Sync completed but with some warnings or partial success
     /// </summary>
-    Partial = 3
+    Partial = 3,
+    
+    /// <summary>
+    /// Sync was cancelled by user
+    /// </summary>
+    Cancelled = 4,
+    
+    /// <summary>
+    /// Sync is paused due to rate limiting
+    /// </summary>
+    RateLimited = 5
 }

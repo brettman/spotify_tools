@@ -250,16 +250,13 @@ public class SpotifyDbContext : Microsoft.EntityFrameworkCore.DbContext
         {
             entity.ToTable("sync_states");
             entity.HasKey(e => e.Id);
-
-            entity.Property(e => e.EntityType).HasMaxLength(50).IsRequired();
-            entity.Property(e => e.Phase).HasMaxLength(50).IsRequired();
-            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
-
-            // Unique constraint on (EntityType, Phase) - only one active sync per entity per phase
-            entity.HasIndex(e => new { e.EntityType, e.Phase }).IsUnique();
-
-            entity.HasIndex(e => e.IsComplete);
-            entity.HasIndex(e => e.RateLimitResetAt);
+            entity.Property(e => e.StateKey).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.EntityType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.LastError).HasMaxLength(1000);
+            
+            entity.HasIndex(e => e.StateKey).IsUnique();
+            entity.HasIndex(e => e.EntityType);
+            entity.HasIndex(e => e.Status);
         });
 
         // SavedCluster configuration

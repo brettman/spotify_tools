@@ -12,6 +12,11 @@
     "EnableErrorAlerts": true,
     "MaxConsecutiveErrors": 5
   },
+  "Sync": {
+    "EnableInitialFullSync": true,
+    "EnableIncrementalSync": true,
+    "IncrementalIntervalMinutes": 30
+  },
   "Serilog": {
     "MinimumLevel": {
       "Default": "Information",
