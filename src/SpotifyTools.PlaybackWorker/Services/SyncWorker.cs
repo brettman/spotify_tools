@@ -1,6 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using SpotifyTools.Sync.Services;
+using SpotifyTools.Sync;
 
 namespace SpotifyTools.PlaybackWorker.Services;
 
@@ -10,15 +11,15 @@ namespace SpotifyTools.PlaybackWorker.Services;
 public class SyncWorker : BackgroundService
 {
     private readonly ILogger<SyncWorker> _logger;
-    private readonly IncrementalSyncOrchestrator _syncOrchestrator;
+    private readonly IServiceProvider _serviceProvider;
     private readonly TimeSpan _syncInterval = TimeSpan.FromMinutes(30);
 
     public SyncWorker(
         ILogger<SyncWorker> logger,
-        IncrementalSyncOrchestrator syncOrchestrator)
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
-        _syncOrchestrator = syncOrchestrator;
+        _serviceProvider = serviceProvider;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -30,7 +31,13 @@ public class SyncWorker : BackgroundService
             try
             {
                 _logger.LogInformation("Starting incremental sync cycle");
-                await _syncOrchestrator.RunIncrementalSyncAsync(stoppingToken);
+                
+                // Create scope to resolve scoped services
+                using var scope = _serviceProvider.CreateScope();
+                var syncService = scope.ServiceProvider.GetRequiredService<ISyncService>();
+                
+                await syncService.IncrementalSyncAsync(stoppingToken);
+                
                 _logger.LogInformation("Incremental sync cycle completed");
             }
             catch (Exception ex)

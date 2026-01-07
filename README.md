@@ -278,9 +278,29 @@ See **DOCKER.md** for view descriptions and example queries.
 
 ## Project Documentation
 
-- **context.md** - Detailed project status, architecture decisions, and progress tracking
-- **CLAUDE.md** - Instructions for Claude Code when working on this project
-- **DOCKER.md** - Docker setup and PostgreSQL management guide
+- **[docs/context.md](docs/context.md)** - Detailed project status, architecture decisions, and progress tracking
+- **[docs/issues.md](docs/issues.md)** - Known bugs and planned improvements
+- **[CLAUDE.md](CLAUDE.md)** - Instructions for Claude Code when working on this project
+
+### Setup and Configuration
+- **[DOCKER.md](docs/DOCKER.md)** - Docker setup and PostgreSQL management guide
+- **[docs/BACKUP.md](docs/BACKUP.md)** - Backup and restore procedures
+
+### Implementation Details
+- **[docs/INCREMENTAL_SYNC_FIX.md](docs/INCREMENTAL_SYNC_FIX.md)** - Incremental sync implementation details
+- **[docs/ADD_TO_PLAYLIST_FEATURE.md](docs/ADD_TO_PLAYLIST_FEATURE.md)** - Playlist generation feature documentation
+- **[docs/SPOTIFY_SYNC_FEATURE.md](docs/SPOTIFY_SYNC_FEATURE.md)** - Sync system architecture
+- **[docs/SYNC_STRATEGY.md](docs/SYNC_STRATEGY.md)** - Sync optimization strategies
+
+### Development History
+- **[docs/API_SUMMARY.md](docs/API_SUMMARY.md)** - Spotify API endpoint reference
+- **[docs/WebUIArchitecture.md](docs/WebUIArchitecture.md)** - Planned web interface design
+- **[docs/PHASE1_COMPLETE.md](docs/PHASE1_COMPLETE.md)** - Phase 1 completion notes
+- **[docs/PHASE2A_COMPLETE.md](docs/PHASE2A_COMPLETE.md)** - Phase 2A completion notes
+- **[docs/PHASE2B_COMPLETE.md](docs/PHASE2B_COMPLETE.md)** - Phase 2B completion notes
+
+### Archived Files
+- **[archive/sql/](archive/sql/)** - One-off SQL helper scripts
 
 ## Technology Stack
 

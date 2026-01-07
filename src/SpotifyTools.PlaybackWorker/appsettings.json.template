@@ -12,6 +12,17 @@
     "EnableErrorAlerts": true,
     "MaxConsecutiveErrors": 5
   },
+  "EmailAlerts": {
+    "Enabled": true,
+    "SmtpHost": "smtp.gmail.com",
+    "SmtpPort": 587,
+    "UseSsl": true,
+    "SenderEmail": "YOUR_EMAIL@gmail.com",
+    "SenderPassword": "YOUR_APP_PASSWORD",
+    "RecipientEmail": "YOUR_EMAIL@gmail.com",
+    "AlertOnAuthFailure": true,
+    "AlertOnConsecutiveErrors": true
+  },
   "Sync": {
     "EnableInitialFullSync": true,
     "EnableIncrementalSync": true,

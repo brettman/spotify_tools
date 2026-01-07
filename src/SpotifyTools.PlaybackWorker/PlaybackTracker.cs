@@ -3,6 +3,7 @@ using SpotifyAPI.Web;
 using SpotifyClientService;
 using SpotifyTools.Data.DbContext;
 using SpotifyTools.Domain.Entities;
+using SpotifyTools.PlaybackWorker.Services;
 
 namespace SpotifyTools.PlaybackWorker;
 
@@ -13,6 +14,7 @@ public class PlaybackTracker : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ISpotifyClientService _spotifyClient;
+    private readonly IEmailAlertService _emailAlertService;
     private readonly ILogger<PlaybackTracker> _logger;
     private readonly IConfiguration _configuration;
     private readonly TimeSpan _pollingInterval;
@@ -24,11 +26,13 @@ public class PlaybackTracker : BackgroundService
     public PlaybackTracker(
         IServiceProvider serviceProvider,
         ISpotifyClientService spotifyClient,
+        IEmailAlertService emailAlertService,
         ILogger<PlaybackTracker> logger,
         IConfiguration configuration)
     {
         _serviceProvider = serviceProvider;
         _spotifyClient = spotifyClient;
+        _emailAlertService = emailAlertService;
         _logger = logger;
         _configuration = configuration;
 
@@ -397,6 +401,9 @@ public class PlaybackTracker : BackgroundService
             _logger.LogError(ex, "Failed to authenticate with stored refresh token. Token may have expired.");
             _logger.LogWarning("Starting interactive authentication...");
             
+            // Send email alert about authentication failure
+            await _emailAlertService.SendAuthenticationFailureAlertAsync(ex);
+            
             // Token expired or invalid - do interactive auth
             await PerformInteractiveAuthenticationAsync(dbContext);
         }
@@ -474,34 +481,14 @@ public class PlaybackTracker : BackgroundService
         }
     }
 
+
     private async Task RaiseErrorAlert(Exception ex)
     {
-        var alertMessage = $@"
-ALERT: Spotify Playback Worker Service Error
+        _logger.LogCritical(ex, "Alert: Service has encountered {Count} consecutive errors", 
+            _consecutiveErrorCount);
 
-The playback tracking service has encountered {_consecutiveErrorCount} consecutive errors.
-
-Last successful poll: {_lastSuccessfulPoll?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Never"}
-Current time: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}
-
-Error: {ex.Message}
-
-Stack Trace:
-{ex.StackTrace}
-";
-
-        _logger.LogCritical(alertMessage);
-
-        // TODO: Implement additional alert mechanisms:
-        // - Send email via SMTP
-        // - Post to Slack webhook
-        // - System notification (macOS notification center, etc.)
-        // - Write to a dedicated alerts log file
-
-        // For now, we're relying on log monitoring
-        // You can add email/Slack integration here based on your needs
-
-        await Task.CompletedTask;
+        // Send email alert
+        await _emailAlertService.SendConsecutiveErrorsAlertAsync(_consecutiveErrorCount, ex);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

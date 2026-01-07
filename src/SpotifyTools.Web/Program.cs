@@ -34,12 +34,15 @@ builder.Services.AddDbContext<SpotifyDbContext>(options =>
 
 // Data layer - Unit of Work and Repositories
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<ISyncStateRepository, SyncStateRepository>();
+builder.Services.AddScoped<SpotifyTools.Sync.Services.IRateLimitTracker, SpotifyTools.Sync.Services.RateLimitTracker>();
 
 // Spotify client service
 builder.Services.AddSingleton<ISpotifyClientService, SpotifyClientWrapper>();
 
 // Sync service
 builder.Services.AddScoped<ISyncService, SyncService>();
+builder.Services.AddScoped<IncrementalSyncOrchestrator>();
 
 // Analytics service
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();

@@ -6,6 +6,7 @@ using SpotifyTools.Data.Repositories;
 using SpotifyTools.Data.Repositories.Implementations;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.PlaybackWorker;
+using SpotifyTools.PlaybackWorker.Services;
 using SpotifyTools.Sync;
 
 // Configure Serilog early logger
@@ -31,6 +32,9 @@ try
         options.UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention());
 
+    // Email alert service
+    builder.Services.AddSingleton<IEmailAlertService, EmailAlertService>();
+
     // Spotify client service
     builder.Services.AddSingleton<ISpotifyClientService, SpotifyClientWrapper>();
 
@@ -40,13 +44,10 @@ try
 
     // Sync services
     builder.Services.AddScoped<ISyncService, SyncService>();
-    builder.Services.AddScoped<IncrementalSyncOrchestrator>();
-
-    // Hosted service for playback tracking
-    builder.Services.AddHostedService<PlaybackTracker>();
     
-    // Hosted service for sync operations
-    builder.Services.AddHostedService<SyncWorker>();
+    // Hosted services
+    builder.Services.AddHostedService<PlaybackTracker>();
+    builder.Services.AddHostedService<SpotifyTools.PlaybackWorker.Services.SyncWorker>();
 
     var host = builder.Build();
 

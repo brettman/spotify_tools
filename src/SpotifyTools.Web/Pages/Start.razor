@@ -15,7 +15,7 @@
     <!-- Main Features -->
     <div class="row g-4 mb-5">
         <!-- Library Browser Card -->
-        <div class="col-md-6">
+        <div class="col-md-4">
             <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/library")' style="cursor: pointer;">
                 <div class="text-center p-5">
                     <div class="mb-4">
@@ -33,7 +33,7 @@
         </div>
 
         <!-- Analytics Card -->
-        <div class="col-md-6">
+        <div class="col-md-4">
             <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/analytics")' style="cursor: pointer;">
                 <div class="text-center p-5">
                     <div class="mb-4">
@@ -45,6 +45,24 @@
                     </p>
                     <button class="spotify-btn spotify-btn-primary">
                         View Analytics →
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Status Card -->
+        <div class="col-md-4">
+            <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/sync")' style="cursor: pointer;">
+                <div class="text-center p-5">
+                    <div class="mb-4">
+                        <i class="bi bi-arrow-repeat text-spotify-green" style="font-size: 4rem;"></i>
+                    </div>
+                    <h3 class="mb-3">Sync Status</h3>
+                    <p class="text-spotify-secondary mb-4">
+                        Monitor library synchronization and trigger manual syncs
+                    </p>
+                    <button class="spotify-btn spotify-btn-primary">
+                        View Sync Status →
                     </button>
                 </div>
             </div>

@@ -18,14 +18,25 @@ public interface IPlaylistService
     Task<PlaylistDetailDto?> GetPlaylistByIdAsync(string id);
 
     /// <summary>
-    /// Create a new playlist
+    /// Create a new playlist (local only, use SyncPlaylistToSpotifyAsync to push to Spotify)
     /// </summary>
     Task<PlaylistDto> CreatePlaylistAsync(CreatePlaylistRequest request);
+
+    /// <summary>
+    /// Create a new playlist and sync it to Spotify immediately
+    /// </summary>
+    Task<PlaylistDto> CreateAndSyncPlaylistAsync(CreatePlaylistRequest request);
 
     /// <summary>
     /// Add tracks to a playlist
     /// </summary>
     Task AddTracksToPlaylistAsync(string playlistId, List<string> trackIds);
+
+    /// <summary>
+    /// Sync an existing local playlist to Spotify (creates or updates)
+    /// </summary>
+    /// <returns>The Spotify playlist ID</returns>
+    Task<string> SyncPlaylistToSpotifyAsync(string playlistId);
 
     /// <summary>
     /// Remove a track from a playlist

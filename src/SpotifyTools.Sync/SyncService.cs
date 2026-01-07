@@ -787,15 +787,16 @@ public class SyncService : ISyncService
         var artistsDict = allArtists.ToDictionary(a => a.Id);
 
         // Identify artists to sync:
-        // 1. Stubs: Genres.Length == 0
+        // 1. Stubs: Never fully synced (LastSyncedAt == FirstSyncedAt or default)
         // 2. Stale: LastSyncedAt < metadataThreshold
         var artistIdsToSync = allArtistIds.Where(id =>
         {
             if (!artistsDict.TryGetValue(id, out var artist))
                 return false; // Artist doesn't exist (shouldn't happen, but skip)
 
-            // Sync if it's a stub (no genres)
-            if (artist.Genres.Length == 0)
+            // Sync if it's a stub (never been fully synced)
+            // Note: Many artists legitimately have no genres, so don't use Genres.Length == 0
+            if (artist.LastSyncedAt == default || artist.LastSyncedAt == artist.FirstSyncedAt)
                 return true;
 
             // Sync if metadata is stale
@@ -824,8 +825,9 @@ public class SyncService : ISyncService
 
                 artistsDict.TryGetValue(artistId, out var existingArtist);
 
-                // Track if this was a stub (for counting)
-                var wasStub = existingArtist?.Genres.Length == 0;
+                // Track if this was a stub (never fully synced)
+                var wasStub = existingArtist?.LastSyncedAt == default || 
+                              existingArtist?.LastSyncedAt == existingArtist?.FirstSyncedAt;
 
                 var artist = new Artist
                 {
@@ -1029,8 +1031,9 @@ public class SyncService : ISyncService
 
                 albumsDict.TryGetValue(albumId, out var existingAlbum);
 
-                // Track if this was a stub (for counting)
-                var wasStub = string.IsNullOrEmpty(existingAlbum?.Label);
+                // Track if this was a stub (never fully synced)
+                var wasStub = existingAlbum?.LastSyncedAt == default || 
+                              existingAlbum?.LastSyncedAt == existingAlbum?.FirstSyncedAt;
 
                 var album = new Album
                 {

@@ -281,6 +281,12 @@
 <!-- Track Details Modal -->
 <TrackDetailsModal Track="selectedTrackDetails" IsVisible="showModal" OnClose="CloseModal" />
 
+<!-- Add to Playlist Modal -->
+<AddToPlaylistModal TrackIds="selectedTracks.ToList()" 
+                    IsVisible="showAddToPlaylistModal" 
+                    OnClose="CloseAddToPlaylistModal"
+                    OnTracksAdded="OnTracksAddedToPlaylist" />
+
 @code {
     private List<GenreDto> genres = new();
     private List<TrackDto> tracks = new();
@@ -296,6 +302,9 @@
     // Track details modal state
     private TrackDetailsDto? selectedTrackDetails;
     private bool showModal = false;
+
+    // Add to playlist modal state
+    private bool showAddToPlaylistModal = false;
 
     // Pagination state
     private int currentPage = 1;
@@ -438,9 +447,31 @@
         await JS.InvokeVoidAsync("alert", "Create playlist modal coming soon!");
     }
 
-    private async Task ShowAddToPlaylistModal()
+    private void ShowAddToPlaylistModal()
     {
-        await JS.InvokeVoidAsync("alert", $"Add {selectedTracks.Count} tracks to playlist (coming soon!)");
+        if (selectedTracks.Count > 0)
+        {
+            showAddToPlaylistModal = true;
+        }
+    }
+
+    private void CloseAddToPlaylistModal()
+    {
+        showAddToPlaylistModal = false;
+    }
+
+    private async Task OnTracksAddedToPlaylist(bool success)
+    {
+        if (success)
+        {
+            // Refresh playlists to show updated track counts
+            playlists = await PlaylistService.GetAllPlaylistsAsync();
+            
+            // Clear selection
+            selectedTracks.Clear();
+            
+            StateHasChanged();
+        }
     }
 
     private string FormatDuration(int durationMs)
