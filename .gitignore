@@ -37,6 +37,9 @@ appsettings.*.json
 .idea/
 *.sln.iml
 
+# Claude IDE
+.claude/
+
 # MacOS
 .DS_Store
 
