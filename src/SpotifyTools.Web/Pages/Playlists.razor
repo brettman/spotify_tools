@@ -1,10 +1,8 @@
 @page "/playlists"
 @using SpotifyTools.Web.Services
 @using SpotifyTools.Web.DTOs
-@using System.Net.Http.Json
 
 @inject IPlaylistService PlaylistService
-@inject HttpClient Http
 @inject ILogger<Playlists> Logger
 @inject NavigationManager Navigation
 
@@ -244,26 +242,16 @@
 
         try
         {
-            var response = await Http.PostAsync($"/api/playlists/{playlistId}/sync", null);
+            var spotifyId = await PlaylistService.SyncPlaylistToSpotifyAsync(playlistId);
+            successMessage = $"Playlist synced to Spotify successfully!";
 
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<SyncResult>();
-                successMessage = $"Playlist synced to Spotify successfully!";
-
-                // Refresh playlists to show updated status
-                await LoadPlaylists();
-            }
-            else
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                errorMessage = $"Failed to sync playlist: {error}";
-            }
+            // Refresh playlists to show updated status
+            await LoadPlaylists();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error syncing playlist {PlaylistId}", playlistId);
-            errorMessage = "An error occurred while syncing. Please try again.";
+            errorMessage = $"Failed to sync playlist: {ex.Message}";
         }
         finally
         {
@@ -296,11 +284,5 @@
     private bool IsGuid(string id)
     {
         return Guid.TryParse(id, out _);
-    }
-
-    private class SyncResult
-    {
-        public string? SpotifyId { get; set; }
-        public string? Message { get; set; }
     }
 }
