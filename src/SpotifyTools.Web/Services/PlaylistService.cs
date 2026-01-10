@@ -301,19 +301,6 @@ public class PlaylistService : IPlaylistService
                 throw new KeyNotFoundException($"Playlist with ID '{playlistId}' not found");
             }
 
-            // Note: In current schema, Playlist.Id IS the Spotify ID
-            // Local-only playlists use GUID, synced playlists use Spotify's ID
-            // Check if this looks like a Spotify ID (base62 format, not GUID)
-            bool isGuid = Guid.TryParse(playlist.Id, out _);
-            
-            if (!isGuid)
-            {
-                // Already has Spotify-style ID, likely already synced
-                _logger.LogInformation("Playlist '{PlaylistName}' appears to already be synced (ID: {PlaylistId})",
-                    playlist.Name, playlist.Id);
-                return playlist.Id;
-            }
-
             // Ensure Spotify client is authenticated
             if (!_spotifyClient.IsAuthenticated)
             {
@@ -343,89 +330,120 @@ public class PlaylistService : IPlaylistService
                 throw new InvalidOperationException($"Playlist '{playlist.Name}' has no tracks to sync.");
             }
 
-            _logger.LogInformation("Creating Spotify playlist '{PlaylistName}' with {TrackCount} tracks",
-                playlist.Name, playlistTracks.Count);
-
-            // Create the playlist on Spotify
-            var playlistRequest = new PlaylistCreateRequest(playlist.Name)
-            {
-                Public = playlist.IsPublic,
-                Description = playlist.Description ?? "Created from Spotify Tools"
-            };
-
-            var spotifyPlaylist = await _spotifyClient.Client.Playlists.Create(_spotifyClient.UserId, playlistRequest);
-
-            _logger.LogInformation("Created Spotify playlist: {PlaylistId} ({PlaylistName})",
-                spotifyPlaylist.Id, spotifyPlaylist.Name);
-
-            // Add tracks to playlist (Spotify API limit is 100 tracks per request)
             var trackUris = playlistTracks
                 .Select(trackId => $"spotify:track:{trackId}")
                 .ToList();
 
-            const int batchSize = 100;
-            for (int i = 0; i < trackUris.Count; i += batchSize)
+            // Check if this is a new playlist (GUID) or existing (Spotify ID)
+            bool isGuid = Guid.TryParse(playlist.Id, out _);
+
+            if (isGuid)
             {
-                var batch = trackUris.Skip(i).Take(batchSize).ToList();
-                var addRequest = new PlaylistAddItemsRequest(batch);
+                // CREATE NEW PLAYLIST ON SPOTIFY
+                _logger.LogInformation("Creating new Spotify playlist '{PlaylistName}' with {TrackCount} tracks",
+                    playlist.Name, playlistTracks.Count);
 
-                await _spotifyClient.Client.Playlists.AddItems(spotifyPlaylist.Id!, addRequest);
-
-                _logger.LogInformation("Added {Count} tracks to Spotify playlist (batch {BatchNum}/{TotalBatches})",
-                    batch.Count, (i / batchSize) + 1, (int)Math.Ceiling(trackUris.Count / (double)batchSize));
-            }
-
-            // Update the playlist ID to the Spotify ID
-            // We need to update the primary key, which requires deleting old record and creating new one
-            var oldId = playlist.Id;
-            
-            // Delete old playlist-track relationships
-            var oldPlaylistTracks = await _dbContext.PlaylistTracks
-                .Where(pt => pt.PlaylistId == oldId)
-                .ToListAsync();
-            
-            _dbContext.PlaylistTracks.RemoveRange(oldPlaylistTracks);
-            
-            // Delete old playlist
-            _unitOfWork.Playlists.Delete(playlist);
-            await _unitOfWork.SaveChangesAsync();
-
-            // Create new playlist with Spotify ID
-            var syncedPlaylist = new Playlist
-            {
-                Id = spotifyPlaylist.Id!,
-                Name = spotifyPlaylist.Name!,
-                Description = playlist.Description,
-                OwnerId = _spotifyClient.UserId,
-                IsPublic = playlist.IsPublic,
-                SnapshotId = spotifyPlaylist.SnapshotId!,
-                FirstSyncedAt = playlist.FirstSyncedAt,
-                LastSyncedAt = DateTime.UtcNow
-            };
-
-            await _unitOfWork.Playlists.AddAsync(syncedPlaylist);
-            await _unitOfWork.SaveChangesAsync();
-
-            // Recreate playlist-track relationships with new ID
-            for (int i = 0; i < playlistTracks.Count; i++)
-            {
-                var pt = new PlaylistTrack
+                var playlistRequest = new PlaylistCreateRequest(playlist.Name)
                 {
-                    PlaylistId = spotifyPlaylist.Id!,
-                    TrackId = playlistTracks[i],
-                    Position = i,
-                    AddedAt = DateTime.UtcNow,
-                    AddedBy = _spotifyClient.UserId
+                    Public = playlist.IsPublic,
+                    Description = playlist.Description ?? "Created from Spotify Tools"
                 };
-                await _unitOfWork.PlaylistTracks.AddAsync(pt);
+
+                var spotifyPlaylist = await _spotifyClient.Client.Playlists.Create(_spotifyClient.UserId, playlistRequest);
+
+                _logger.LogInformation("Created Spotify playlist: {PlaylistId} ({PlaylistName})",
+                    spotifyPlaylist.Id, spotifyPlaylist.Name);
+
+                // Add tracks to playlist (Spotify API limit is 100 tracks per request)
+                const int batchSize = 100;
+                for (int i = 0; i < trackUris.Count; i += batchSize)
+                {
+                    var batch = trackUris.Skip(i).Take(batchSize).ToList();
+                    var addRequest = new PlaylistAddItemsRequest(batch);
+
+                    await _spotifyClient.Client.Playlists.AddItems(spotifyPlaylist.Id!, addRequest);
+
+                    _logger.LogInformation("Added {Count} tracks to Spotify playlist (batch {BatchNum}/{TotalBatches})",
+                        batch.Count, (i / batchSize) + 1, (int)Math.Ceiling(trackUris.Count / (double)batchSize));
+                }
+
+                // Update the playlist ID to the Spotify ID
+                // We need to update the primary key, which requires deleting old record and creating new one
+                var oldId = playlist.Id;
+
+                // Delete old playlist-track relationships
+                var oldPlaylistTracks = await _dbContext.PlaylistTracks
+                    .Where(pt => pt.PlaylistId == oldId)
+                    .ToListAsync();
+
+                _dbContext.PlaylistTracks.RemoveRange(oldPlaylistTracks);
+
+                // Delete old playlist
+                _unitOfWork.Playlists.Delete(playlist);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Create new playlist with Spotify ID
+                var syncedPlaylist = new Playlist
+                {
+                    Id = spotifyPlaylist.Id!,
+                    Name = spotifyPlaylist.Name!,
+                    Description = playlist.Description,
+                    OwnerId = _spotifyClient.UserId,
+                    IsPublic = playlist.IsPublic,
+                    SnapshotId = spotifyPlaylist.SnapshotId!,
+                    FirstSyncedAt = playlist.FirstSyncedAt,
+                    LastSyncedAt = DateTime.UtcNow
+                };
+
+                await _unitOfWork.Playlists.AddAsync(syncedPlaylist);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Recreate playlist-track relationships with new ID
+                for (int i = 0; i < playlistTracks.Count; i++)
+                {
+                    var pt = new PlaylistTrack
+                    {
+                        PlaylistId = spotifyPlaylist.Id!,
+                        TrackId = playlistTracks[i],
+                        Position = i,
+                        AddedAt = DateTime.UtcNow,
+                        AddedBy = _spotifyClient.UserId
+                    };
+                    await _unitOfWork.PlaylistTracks.AddAsync(pt);
+                }
+
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation("Successfully created and synced playlist '{PlaylistName}' to Spotify with {TrackCount} tracks",
+                    syncedPlaylist.Name, trackUris.Count);
+
+                return spotifyPlaylist.Id!;
             }
-            
-            await _unitOfWork.SaveChangesAsync();
+            else
+            {
+                // UPDATE EXISTING SPOTIFY PLAYLIST
+                _logger.LogInformation("Updating existing Spotify playlist '{PlaylistName}' (ID: {PlaylistId}) with {TrackCount} tracks",
+                    playlist.Name, playlist.Id, playlistTracks.Count);
 
-            _logger.LogInformation("Successfully synced playlist '{PlaylistName}' to Spotify with {TrackCount} tracks",
-                syncedPlaylist.Name, trackUris.Count);
+                // Replace all tracks in the Spotify playlist with current local tracks
+                var replaceRequest = new PlaylistReplaceItemsRequest(trackUris);
+                await _spotifyClient.Client.Playlists.ReplaceItems(playlist.Id, replaceRequest);
 
-            return spotifyPlaylist.Id!;
+                _logger.LogInformation("Replaced all tracks in Spotify playlist '{PlaylistName}'", playlist.Name);
+
+                // Fetch updated playlist info to get new SnapshotId
+                var updatedPlaylist = await _spotifyClient.Client.Playlists.Get(playlist.Id);
+
+                // Update local playlist metadata
+                playlist.SnapshotId = updatedPlaylist.SnapshotId!;
+                playlist.LastSyncedAt = DateTime.UtcNow;
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation("Successfully updated Spotify playlist '{PlaylistName}' with {TrackCount} tracks",
+                    playlist.Name, trackUris.Count);
+
+                return playlist.Id;
+            }
         }
         catch (Exception ex)
         {

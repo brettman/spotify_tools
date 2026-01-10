@@ -123,12 +123,12 @@
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        @if (!isSpotifyPlaylist && playlist.TrackCount > 0)
+                                        @if (playlist.TrackCount > 0)
                                         {
-                                            <button class="btn btn-sm btn-success"
+                                            <button class="btn btn-sm @(isSpotifyPlaylist ? "btn-outline-success" : "btn-success")"
                                                     @onclick="() => SyncPlaylistToSpotify(playlist.Id)"
                                                     disabled="@isSyncing"
-                                                    title="Push to Spotify">
+                                                    title="@(isSpotifyPlaylist ? "Update Spotify playlist with local changes" : "Create playlist on Spotify")">
                                                 @if (isSyncing)
                                                 {
                                                     <span class="spinner-border spinner-border-sm"></span>
@@ -137,16 +137,10 @@
                                                 {
                                                     <i class="bi bi-cloud-upload"></i>
                                                 }
-                                                Sync to Spotify
+                                                @(isSpotifyPlaylist ? "Push Updates" : "Sync to Spotify")
                                             </button>
                                         }
-                                        else if (isSpotifyPlaylist)
-                                        {
-                                            <button class="btn btn-sm btn-outline-success" disabled title="Already synced">
-                                                <i class="bi bi-check-circle"></i> Already Synced
-                                            </button>
-                                        }
-                                        else if (playlist.TrackCount == 0)
+                                        else
                                         {
                                             <button class="btn btn-sm btn-outline-secondary" disabled title="Add tracks first">
                                                 <i class="bi bi-exclamation-circle"></i> No Tracks
@@ -255,7 +249,7 @@
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<SyncResult>();
-                successMessage = $"Playlist synced to Spotify successfully! Spotify ID: {result?.SpotifyId}";
+                successMessage = $"Playlist synced to Spotify successfully!";
 
                 // Refresh playlists to show updated status
                 await LoadPlaylists();
