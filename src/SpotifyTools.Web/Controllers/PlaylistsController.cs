@@ -155,4 +155,33 @@ public class PlaylistsController : ControllerBase
             return StatusCode(500, "An error occurred while deleting playlist");
         }
     }
+
+    /// <summary>
+    /// Sync a local playlist to Spotify
+    /// </summary>
+    [HttpPost("{id}/sync")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> SyncPlaylistToSpotify(string id)
+    {
+        try
+        {
+            var spotifyId = await _playlistService.SyncPlaylistToSpotifyAsync(id);
+            return Ok(new { spotifyId, message = "Playlist synced to Spotify successfully" });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing playlist {PlaylistId} to Spotify", id);
+            return StatusCode(500, "An error occurred while syncing playlist");
+        }
+    }
 }

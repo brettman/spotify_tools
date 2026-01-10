@@ -15,35 +15,53 @@
     <!-- Main Features -->
     <div class="row g-4 mb-5">
         <!-- Library Browser Card -->
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/library")' style="cursor: pointer;">
-                <div class="text-center p-5">
-                    <div class="mb-4">
-                        <i class="bi bi-music-note-list text-spotify-green" style="font-size: 4rem;"></i>
+                <div class="text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-music-note-list text-spotify-green" style="font-size: 3.5rem;"></i>
                     </div>
-                    <h3 class="mb-3">Music Library</h3>
-                    <p class="text-spotify-secondary mb-4">
-                        Browse your tracks by genre, create playlists, and manage your music collection
+                    <h3 class="mb-2">Music Library</h3>
+                    <p class="text-spotify-secondary mb-3 small">
+                        Browse tracks by genre and build your collection
                     </p>
-                    <button class="spotify-btn spotify-btn-primary">
+                    <button class="spotify-btn spotify-btn-primary btn-sm">
                         Open Library →
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Analytics Card -->
-        <div class="col-md-4">
-            <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/analytics")' style="cursor: pointer;">
-                <div class="text-center p-5">
-                    <div class="mb-4">
-                        <i class="bi bi-graph-up text-spotify-green" style="font-size: 4rem;"></i>
+        <!-- Playlists Card -->
+        <div class="col-md-3">
+            <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/playlists")' style="cursor: pointer;">
+                <div class="text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-collection-play text-spotify-green" style="font-size: 3.5rem;"></i>
                     </div>
-                    <h3 class="mb-3">Listening Analytics</h3>
-                    <p class="text-spotify-secondary mb-4">
-                        Discover your listening patterns, top tracks, artists, and detailed statistics
+                    <h3 class="mb-2">Playlists</h3>
+                    <p class="text-spotify-secondary mb-3 small">
+                        Manage playlists and sync to Spotify
                     </p>
-                    <button class="spotify-btn spotify-btn-primary">
+                    <button class="spotify-btn spotify-btn-primary btn-sm">
+                        View Playlists →
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Card -->
+        <div class="col-md-3">
+            <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/analytics")' style="cursor: pointer;">
+                <div class="text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-graph-up text-spotify-green" style="font-size: 3.5rem;"></i>
+                    </div>
+                    <h3 class="mb-2">Listening Analytics</h3>
+                    <p class="text-spotify-secondary mb-3 small">
+                        Discover patterns and statistics
+                    </p>
+                    <button class="spotify-btn spotify-btn-primary btn-sm">
                         View Analytics →
                     </button>
                 </div>
@@ -51,17 +69,17 @@
         </div>
 
         <!-- Sync Status Card -->
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/sync")' style="cursor: pointer;">
-                <div class="text-center p-5">
-                    <div class="mb-4">
-                        <i class="bi bi-arrow-repeat text-spotify-green" style="font-size: 4rem;"></i>
+                <div class="text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-arrow-repeat text-spotify-green" style="font-size: 3.5rem;"></i>
                     </div>
-                    <h3 class="mb-3">Sync Status</h3>
-                    <p class="text-spotify-secondary mb-4">
-                        Monitor library synchronization and trigger manual syncs
+                    <h3 class="mb-2">Sync Status</h3>
+                    <p class="text-spotify-secondary mb-3 small">
+                        Monitor library synchronization
                     </p>
-                    <button class="spotify-btn spotify-btn-primary">
+                    <button class="spotify-btn spotify-btn-primary btn-sm">
                         View Sync Status →
                     </button>
                 </div>

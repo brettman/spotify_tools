@@ -1,0 +1,312 @@
+@page "/playlists"
+@using SpotifyTools.Web.Services
+@using SpotifyTools.Web.DTOs
+@using System.Net.Http.Json
+
+@inject IPlaylistService PlaylistService
+@inject HttpClient Http
+@inject ILogger<Playlists> Logger
+@inject NavigationManager Navigation
+
+<PageTitle>Playlists</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/start")'>
+                ← Back
+            </button>
+        </div>
+        <div class="col">
+            <h1>📋 Playlists</h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="RefreshPlaylists" disabled="@isLoading">
+                <span class="@(isLoading ? "spinner-border spinner-border-sm me-1" : "")"></span>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading && playlists.Count == 0)
+    {
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Loading playlists...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            @errorMessage
+        </div>
+    }
+    else if (playlists.Count == 0)
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            No playlists found. Create one from the <a href="/library">library page</a>.
+        </div>
+    }
+    else
+    {
+        <!-- Success/Info Messages -->
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                @successMessage
+                <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+            </div>
+        }
+
+        <!-- Playlists Table -->
+        <div class="card">
+            <div class="card-body">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Tracks</th>
+                            <th>Type</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var playlist in playlists)
+                        {
+                            var isSpotifyPlaylist = !IsGuid(playlist.Id);
+                            var isSyncing = syncingPlaylists.Contains(playlist.Id);
+
+                            <tr>
+                                <td>
+                                    @if (isSyncing)
+                                    {
+                                        <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                                    }
+                                    else if (isSpotifyPlaylist)
+                                    {
+                                        <span class="badge bg-success" title="Synced to Spotify">
+                                            <i class="bi bi-cloud-check-fill"></i> Synced
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary" title="Local only">
+                                            <i class="bi bi-laptop"></i> Local
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    <strong>@playlist.Name</strong>
+                                </td>
+                                <td>
+                                    <span class="text-muted">@(playlist.Description ?? "-")</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info rounded-pill">@playlist.TrackCount</span>
+                                </td>
+                                <td>
+                                    @if (playlist.IsPublic)
+                                    {
+                                        <span class="badge bg-light text-dark">Public</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-dark">Private</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        @if (!isSpotifyPlaylist && playlist.TrackCount > 0)
+                                        {
+                                            <button class="btn btn-sm btn-success"
+                                                    @onclick="() => SyncPlaylistToSpotify(playlist.Id)"
+                                                    disabled="@isSyncing"
+                                                    title="Push to Spotify">
+                                                @if (isSyncing)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-cloud-upload"></i>
+                                                }
+                                                Sync to Spotify
+                                            </button>
+                                        }
+                                        else if (isSpotifyPlaylist)
+                                        {
+                                            <button class="btn btn-sm btn-outline-success" disabled title="Already synced">
+                                                <i class="bi bi-check-circle"></i> Already Synced
+                                            </button>
+                                        }
+                                        else if (playlist.TrackCount == 0)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" disabled title="Add tracks first">
+                                                <i class="bi bi-exclamation-circle"></i> No Tracks
+                                            </button>
+                                        }
+
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                @onclick="() => ViewPlaylist(playlist.Id)"
+                                                title="View details">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                @onclick="() => DeletePlaylist(playlist.Id)"
+                                                disabled="@isSyncing"
+                                                title="Delete playlist">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="row mt-3">
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Total Playlists</h5>
+                        <p class="display-6 mb-0">@playlists.Count</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Synced to Spotify</h5>
+                        <p class="display-6 mb-0">@playlists.Count(p => !IsGuid(p.Id))</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-secondary text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Local Only</h5>
+                        <p class="display-6 mb-0">@playlists.Count(p => IsGuid(p.Id))</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<PlaylistDto> playlists = new();
+    private HashSet<string> syncingPlaylists = new();
+    private bool isLoading = false;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPlaylists();
+    }
+
+    private async Task LoadPlaylists()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            playlists = await PlaylistService.GetAllPlaylistsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading playlists");
+            errorMessage = "Failed to load playlists. Please try again.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshPlaylists()
+    {
+        await LoadPlaylists();
+        successMessage = "Playlists refreshed successfully.";
+    }
+
+    private async Task SyncPlaylistToSpotify(string playlistId)
+    {
+        syncingPlaylists.Add(playlistId);
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsync($"/api/playlists/{playlistId}/sync", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<SyncResult>();
+                successMessage = $"Playlist synced to Spotify successfully! Spotify ID: {result?.SpotifyId}";
+
+                // Refresh playlists to show updated status
+                await LoadPlaylists();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to sync playlist: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error syncing playlist {PlaylistId}", playlistId);
+            errorMessage = "An error occurred while syncing. Please try again.";
+        }
+        finally
+        {
+            syncingPlaylists.Remove(playlistId);
+        }
+    }
+
+    private void ViewPlaylist(string playlistId)
+    {
+        // TODO: Navigate to playlist detail page
+        Logger.LogInformation("View playlist: {PlaylistId}", playlistId);
+    }
+
+    private async Task DeletePlaylist(string playlistId)
+    {
+        // TODO: Add confirmation dialog
+        try
+        {
+            await PlaylistService.DeletePlaylistAsync(playlistId);
+            successMessage = "Playlist deleted successfully.";
+            await LoadPlaylists();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting playlist {PlaylistId}", playlistId);
+            errorMessage = "Failed to delete playlist. Please try again.";
+        }
+    }
+
+    private bool IsGuid(string id)
+    {
+        return Guid.TryParse(id, out _);
+    }
+
+    private class SyncResult
+    {
+        public string? SpotifyId { get; set; }
+        public string? Message { get; set; }
+    }
+}
