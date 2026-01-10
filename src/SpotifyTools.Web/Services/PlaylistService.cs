@@ -41,7 +41,9 @@ public class PlaylistService : IPlaylistService
                     Description = p.Description,
                     TrackCount = p.PlaylistTracks.Count,
                     IsPublic = p.IsPublic,
-                    SpotifyId = null // Local playlist
+                    SpotifyId = null, // Local playlist
+                    LastSyncedAt = p.LastSyncedAt,
+                    LastModifiedAt = p.LastModifiedAt
                 })
                 .ToListAsync();
 
@@ -69,6 +71,8 @@ public class PlaylistService : IPlaylistService
                     TrackCount = p.PlaylistTracks.Count,
                     IsPublic = p.IsPublic,
                     SpotifyId = null,
+                    LastSyncedAt = p.LastSyncedAt,
+                    LastModifiedAt = p.LastModifiedAt,
                     Tracks = p.PlaylistTracks
                         .OrderBy(pt => pt.Position)
                         .Select(pt => new TrackDto
@@ -116,6 +120,7 @@ public class PlaylistService : IPlaylistService
     {
         try
         {
+            var now = DateTime.UtcNow;
             var playlist = new Playlist
             {
                 Id = Guid.NewGuid().ToString(),
@@ -124,8 +129,9 @@ public class PlaylistService : IPlaylistService
                 IsPublic = request.IsPublic,
                 OwnerId = "local", // TODO: Use actual user ID when authentication is implemented
                 SnapshotId = Guid.NewGuid().ToString(),
-                FirstSyncedAt = DateTime.UtcNow,
-                LastSyncedAt = DateTime.UtcNow
+                FirstSyncedAt = now,
+                LastSyncedAt = now,
+                LastModifiedAt = now
             };
 
             await _unitOfWork.Playlists.AddAsync(playlist);
@@ -138,7 +144,9 @@ public class PlaylistService : IPlaylistService
                 Description = playlist.Description,
                 TrackCount = 0,
                 IsPublic = playlist.IsPublic,
-                SpotifyId = null
+                SpotifyId = null,
+                LastSyncedAt = playlist.LastSyncedAt,
+                LastModifiedAt = playlist.LastModifiedAt
             };
         }
         catch (Exception ex)
@@ -200,6 +208,8 @@ public class PlaylistService : IPlaylistService
                 await _unitOfWork.PlaylistTracks.AddAsync(playlistTrack);
             }
 
+            // Update last modified timestamp
+            playlist.LastModifiedAt = DateTime.UtcNow;
             await _unitOfWork.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -213,6 +223,12 @@ public class PlaylistService : IPlaylistService
     {
         try
         {
+            var playlist = await _unitOfWork.Playlists.GetByIdAsync(playlistId);
+            if (playlist == null)
+            {
+                throw new KeyNotFoundException($"Playlist with ID '{playlistId}' not found");
+            }
+
             var playlistTracks = await _dbContext.PlaylistTracks
                 .Where(pt => pt.PlaylistId == playlistId && pt.TrackId == trackId)
                 .ToListAsync();
@@ -227,6 +243,8 @@ public class PlaylistService : IPlaylistService
                 _unitOfWork.PlaylistTracks.Delete(pt);
             }
 
+            // Update last modified timestamp
+            playlist.LastModifiedAt = DateTime.UtcNow;
             await _unitOfWork.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -392,7 +410,8 @@ public class PlaylistService : IPlaylistService
                     IsPublic = playlist.IsPublic,
                     SnapshotId = spotifyPlaylist.SnapshotId!,
                     FirstSyncedAt = playlist.FirstSyncedAt,
-                    LastSyncedAt = DateTime.UtcNow
+                    LastSyncedAt = DateTime.UtcNow,
+                    LastModifiedAt = playlist.LastModifiedAt // Preserve original modification time
                 };
 
                 await _unitOfWork.Playlists.AddAsync(syncedPlaylist);

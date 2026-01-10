@@ -118,6 +118,7 @@
                         {
                             var isSpotifyPlaylist = !IsGuid(playlist.Id);
                             var isSyncing = syncingPlaylists.Contains(playlist.Id);
+                            var hasUnsyncedChanges = playlist.LastModifiedAt > playlist.LastSyncedAt;
 
                             <tr>
                                 <td>
@@ -125,15 +126,21 @@
                                     {
                                         <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
                                     }
+                                    else if (hasUnsyncedChanges && isSpotifyPlaylist)
+                                    {
+                                        <span class="badge bg-warning text-dark" title="Has local changes - click Push Updates to sync">
+                                            <i class="bi bi-exclamation-triangle-fill"></i> Has Changes
+                                        </span>
+                                    }
                                     else if (isSpotifyPlaylist)
                                     {
-                                        <span class="badge bg-info" title="Exists on Spotify - click Push Updates to sync local changes">
-                                            <i class="bi bi-spotify"></i> On Spotify
+                                        <span class="badge bg-success" title="Synced with Spotify">
+                                            <i class="bi bi-check-circle-fill"></i> Synced
                                         </span>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-secondary" title="Local only">
+                                        <span class="badge bg-secondary" title="Local only - not yet on Spotify">
                                             <i class="bi bi-laptop"></i> Local
                                         </span>
                                     }

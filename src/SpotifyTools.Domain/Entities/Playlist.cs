@@ -45,6 +45,12 @@ public class Playlist
     /// </summary>
     public DateTime LastSyncedAt { get; set; }
 
+    /// <summary>
+    /// When this playlist was last modified locally (tracks added/removed)
+    /// Used to detect if local changes need to be synced to Spotify
+    /// </summary>
+    public DateTime LastModifiedAt { get; set; }
+
     // Navigation properties
     public ICollection<PlaylistTrack> PlaylistTracks { get; set; } = new List<PlaylistTrack>();
 }

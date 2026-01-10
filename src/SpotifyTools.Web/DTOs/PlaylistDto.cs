@@ -8,6 +8,8 @@ public class PlaylistDto
     public int TrackCount { get; set; }
     public bool IsPublic { get; set; }
     public string? SpotifyId { get; set; }
+    public DateTime LastSyncedAt { get; set; }
+    public DateTime LastModifiedAt { get; set; }
 }
 
 public class PlaylistDetailDto : PlaylistDto
