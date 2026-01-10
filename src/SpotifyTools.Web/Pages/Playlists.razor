@@ -26,6 +26,44 @@
         </div>
     </div>
 
+    <!-- Search and Filter -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text"
+                       class="form-control"
+                       placeholder="Search playlists by name..."
+                       @bind="searchQuery"
+                       @bind:event="oninput"
+                       @onkeyup="FilterPlaylists" />
+                @if (!string.IsNullOrEmpty(searchQuery))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" @bind="filterType" @bind:after="FilterPlaylists">
+                <option value="all">All Playlists (@allPlaylists.Count)</option>
+                <option value="local">Local Only (@allPlaylists.Count(p => IsGuid(p.Id)))</option>
+                <option value="synced">On Spotify (@allPlaylists.Count(p => !IsGuid(p.Id)))</option>
+                <option value="empty">Empty Playlists (@allPlaylists.Count(p => p.TrackCount == 0))</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" @bind="sortBy" @bind:after="SortPlaylists">
+                <option value="name">Sort by Name</option>
+                <option value="tracks">Sort by Track Count</option>
+                <option value="type">Sort by Type</option>
+            </select>
+        </div>
+    </div>
+
     @if (isLoading && playlists.Count == 0)
     {
         <div class="text-center p-5">
@@ -89,8 +127,8 @@
                                     }
                                     else if (isSpotifyPlaylist)
                                     {
-                                        <span class="badge bg-success" title="Synced to Spotify">
-                                            <i class="bi bi-cloud-check-fill"></i> Synced
+                                        <span class="badge bg-info" title="Exists on Spotify - click Push Updates to sync local changes">
+                                            <i class="bi bi-spotify"></i> On Spotify
                                         </span>
                                     }
                                     else
@@ -196,12 +234,127 @@
     }
 </div>
 
+<!-- Playlist Detail Modal -->
+@if (selectedPlaylistForView != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-music-note-list me-2"></i>
+                        @selectedPlaylistForView.Name
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseDetailModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (loadingDetail)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2">Loading playlist details...</p>
+                        </div>
+                    }
+                    else if (playlistDetail != null)
+                    {
+                        <div class="mb-3">
+                            <p class="mb-2">
+                                <strong>Description:</strong> @(playlistDetail.Description ?? "No description")
+                            </p>
+                            <p class="mb-2">
+                                <strong>Tracks:</strong> @playlistDetail.TrackCount
+                            </p>
+                            <p class="mb-2">
+                                <strong>Total Duration:</strong> @FormatDuration(playlistDetail.TotalDurationMs)
+                            </p>
+                            <p class="mb-0">
+                                <strong>Type:</strong>
+                                @if (playlistDetail.IsPublic)
+                                {
+                                    <span class="badge bg-light text-dark">Public</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-dark">Private</span>
+                                }
+                                @if (IsGuid(playlistDetail.Id))
+                                {
+                                    <span class="badge bg-secondary ms-1"><i class="bi bi-laptop"></i> Local</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-info ms-1"><i class="bi bi-spotify"></i> On Spotify</span>
+                                }
+                            </p>
+                        </div>
+
+                        @if (playlistDetail.Tracks.Any())
+                        {
+                            <h6 class="mt-3 mb-2">Tracks</h6>
+                            <div class="table-responsive" style="max-height: 400px;">
+                                <table class="table table-sm table-hover">
+                                    <thead class="sticky-top bg-white">
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Title</th>
+                                            <th>Artist(s)</th>
+                                            <th>Album</th>
+                                            <th>Duration</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @for (int i = 0; i < playlistDetail.Tracks.Count; i++)
+                                        {
+                                            var track = playlistDetail.Tracks[i];
+                                            <tr>
+                                                <td class="text-muted">@(i + 1)</td>
+                                                <td>
+                                                    <strong>@track.Name</strong>
+                                                    @if (track.Explicit)
+                                                    {
+                                                        <span class="badge badge-sm bg-secondary ms-1">E</span>
+                                                    }
+                                                </td>
+                                                <td>@string.Join(", ", track.Artists.Select(a => a.Name))</td>
+                                                <td class="text-muted small">@track.AlbumName</td>
+                                                <td class="text-muted small">@FormatDuration(track.DurationMs)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">This playlist has no tracks.</p>
+                        }
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetailModal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<PlaylistDto> playlists = new();
+    private List<PlaylistDto> allPlaylists = new();
     private HashSet<string> syncingPlaylists = new();
     private bool isLoading = false;
     private string? errorMessage;
     private string? successMessage;
+
+    // Search and filter
+    private string searchQuery = string.Empty;
+    private string filterType = "all";
+    private string sortBy = "name";
+
+    // Detail modal
+    private PlaylistDto? selectedPlaylistForView;
+    private PlaylistDetailDto? playlistDetail;
+    private bool loadingDetail = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -215,7 +368,8 @@
 
         try
         {
-            playlists = await PlaylistService.GetAllPlaylistsAsync();
+            allPlaylists = await PlaylistService.GetAllPlaylistsAsync();
+            FilterPlaylists();
         }
         catch (Exception ex)
         {
@@ -259,10 +413,34 @@
         }
     }
 
-    private void ViewPlaylist(string playlistId)
+    private async Task ViewPlaylist(string playlistId)
     {
-        // TODO: Navigate to playlist detail page
-        Logger.LogInformation("View playlist: {PlaylistId}", playlistId);
+        selectedPlaylistForView = playlists.FirstOrDefault(p => p.Id == playlistId);
+        if (selectedPlaylistForView == null) return;
+
+        loadingDetail = true;
+        playlistDetail = null;
+
+        try
+        {
+            playlistDetail = await PlaylistService.GetPlaylistByIdAsync(playlistId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading playlist details for {PlaylistId}", playlistId);
+            errorMessage = "Failed to load playlist details.";
+            selectedPlaylistForView = null;
+        }
+        finally
+        {
+            loadingDetail = false;
+        }
+    }
+
+    private void CloseDetailModal()
+    {
+        selectedPlaylistForView = null;
+        playlistDetail = null;
     }
 
     private async Task DeletePlaylist(string playlistId)
@@ -279,6 +457,57 @@
             Logger.LogError(ex, "Error deleting playlist {PlaylistId}", playlistId);
             errorMessage = "Failed to delete playlist. Please try again.";
         }
+    }
+
+    private void FilterPlaylists()
+    {
+        var filtered = allPlaylists.AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filtered = filtered.Where(p =>
+                p.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                (p.Description?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        // Apply type filter
+        filtered = filterType switch
+        {
+            "local" => filtered.Where(p => IsGuid(p.Id)),
+            "synced" => filtered.Where(p => !IsGuid(p.Id)),
+            "empty" => filtered.Where(p => p.TrackCount == 0),
+            _ => filtered
+        };
+
+        playlists = filtered.ToList();
+        SortPlaylists();
+    }
+
+    private void SortPlaylists()
+    {
+        playlists = sortBy switch
+        {
+            "tracks" => playlists.OrderByDescending(p => p.TrackCount).ToList(),
+            "type" => playlists.OrderBy(p => IsGuid(p.Id)).ThenBy(p => p.Name).ToList(),
+            _ => playlists.OrderBy(p => p.Name).ToList()
+        };
+    }
+
+    private void ClearSearch()
+    {
+        searchQuery = string.Empty;
+        FilterPlaylists();
+    }
+
+    private string FormatDuration(int durationMs)
+    {
+        var timeSpan = TimeSpan.FromMilliseconds(durationMs);
+        if (timeSpan.TotalHours >= 1)
+        {
+            return $"{(int)timeSpan.TotalHours}h {timeSpan.Minutes}m";
+        }
+        return $"{timeSpan.Minutes}m {timeSpan.Seconds}s";
     }
 
     private bool IsGuid(string id)

@@ -33,17 +33,13 @@
                 </span>
                 <span class="spotify-sidebar-item-text">Analytics</span>
             </a>
-        </div>
 
-        <!-- Playlists Section -->
-        <div class="spotify-sidebar-section">
-            <div class="spotify-sidebar-section-title">Playlists</div>
-            <div class="spotify-sidebar-item" style="opacity: 0.5; cursor: default;">
+            <a href="/playlists" class="spotify-sidebar-item @(IsActive("/playlists") ? "active" : "")" @onclick="OnNavigate">
                 <span class="spotify-sidebar-item-icon">
-                    <i class="bi bi-music-note-list"></i>
+                    <i class="bi bi-collection-play"></i>
                 </span>
-                <span class="spotify-sidebar-item-text">Coming Soon</span>
-            </div>
+                <span class="spotify-sidebar-item-text">Playlists</span>
+            </a>
         </div>
     </nav>
 </aside>
