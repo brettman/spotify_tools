@@ -207,6 +207,59 @@ See `issues.md` for tracked bugs and UX improvements:
 - Removed genres need intelligent handling (not just dropped)
 - Description must reflect actual refined genre list, not original
 
+## Web UI & Playlist Management
+
+**Status:** ✅ Production Ready (Jan 2026)
+
+**Goal:** Provide comprehensive playlist management better than native Spotify UI, especially for users with hundreds of playlists and thousands of songs.
+
+### Playlist Management Page (`/playlists`)
+
+**Features:**
+- **Manual Spotify Sync** - Local-first workflow with explicit sync control
+- **Dirty Tracking** - Visual indicators for playlists with unsaved changes
+- **Search & Filter** - Real-time search with multiple filter options
+- **Detail Modal** - View full track lists with metadata
+- **Bulk Operations** - Select and manage multiple playlists
+
+**Visual Status Indicators:**
+- 🟨 Yellow "Has Changes" - Local modifications need syncing (`LastModifiedAt > LastSyncedAt`)
+- 🟩 Green "Synced" - Up-to-date with Spotify
+- ⚪ Gray "Local" - Not yet on Spotify (GUID ID)
+
+**Search & Filter Options:**
+- Real-time search by name/description
+- Filter: All, Has Changes, Local Only, On Spotify, Empty Playlists
+- Sort: By Name, Track Count, or Type
+- Dynamic counts in dropdown
+
+**Sync Operations:**
+- **New Playlists (GUID):** Creates on Spotify with all tracks
+- **Existing Playlists (Spotify ID):** Updates using ReplaceItems API
+- **Strategy:** Local overwrites Spotify (one-way sync)
+
+**Database Schema:**
+```sql
+-- playlists table additions
+last_modified_at  timestamp with time zone NOT NULL  -- Tracks local changes
+last_synced_at    timestamp with time zone NOT NULL  -- Tracks sync operations
+```
+
+**Migration:** `20260110212304_AddLastModifiedAtToPlaylists` (snake_case verified)
+
+**API Endpoints:**
+- `GET /api/playlists` - List all playlists
+- `GET /api/playlists/{id}` - Get playlist details with tracks
+- `POST /api/playlists` - Create new playlist
+- `POST /api/playlists/{id}/sync` - Sync playlist to Spotify
+- `POST /api/playlists/{id}/tracks` - Add tracks (updates LastModifiedAt)
+- `DELETE /api/playlists/{id}/tracks/{trackId}` - Remove track (updates LastModifiedAt)
+- `DELETE /api/playlists/{id}` - Delete playlist
+
+**Service:** `PlaylistService` in `src/SpotifyTools.Web/Services/PlaylistService.cs`
+
+**Documentation:** See `docs/PLAYLIST_MANAGEMENT.md` for complete details.
+
 ## Sync System
 
 ### Sync Types
