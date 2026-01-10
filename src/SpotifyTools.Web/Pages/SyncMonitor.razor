@@ -1,0 +1,603 @@
+@page "/sync"
+@using SpotifyTools.Web.DTOs
+@using SpotifyTools.Data.Repositories.Interfaces
+@using SpotifyTools.Domain.Enums
+@using SpotifyTools.Sync
+
+@inject IServiceProvider ServiceProvider
+@inject ILogger<SyncMonitor> Logger
+@inject NavigationManager Navigation
+
+<PageTitle>Sync Status</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="row mb-3">
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/start")'>
+                ← Back
+            </button>
+        </div>
+        <div class="col">
+            <h1>🔄 Sync Status</h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary me-2" @onclick="RefreshStatus" disabled="@isRefreshing">
+                <span class="@(isRefreshing ? "spinner-border spinner-border-sm me-1" : "")"></span>
+                Refresh
+            </button>
+            @if (!currentStatus.IsActive)
+            {
+                <button class="btn btn-primary me-2" @onclick="StartIncrementalSync" disabled="@isStarting">
+                    Start Incremental Sync
+                </button>
+                <button class="btn btn-warning" @onclick="StartFullSync" disabled="@isStarting">
+                    Start Full Sync
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (errorMessage != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>Error:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (successMessage != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    <!-- Current Status Card -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Current Status</h5>
+        </div>
+        <div class="card-body">
+            @if (isLoadingStatus)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (currentStatus.IsActive)
+            {
+                <div class="mb-3">
+                    <h6>
+                        Status: <span class="badge bg-primary">@currentStatus.Status</span>
+                    </h6>
+                    @if (currentStatus.StartedAt.HasValue)
+                    {
+                        <small class="text-muted">Started: @currentStatus.StartedAt.Value.ToLocalTime().ToString("g")</small>
+                    }
+                </div>
+
+                <!-- Phase Progress -->
+                @if (currentStatus.TracksProgress != null)
+                {
+                    <div class="mb-3">
+                        <h6>Tracks Phase</h6>
+                        <RenderPhaseProgress Progress="@currentStatus.TracksProgress" />
+                    </div>
+                }
+
+                @if (currentStatus.ArtistsProgress != null)
+                {
+                    <div class="mb-3">
+                        <h6>Artists Phase</h6>
+                        <RenderPhaseProgress Progress="@currentStatus.ArtistsProgress" />
+                    </div>
+                }
+
+                @if (currentStatus.AlbumsProgress != null)
+                {
+                    <div class="mb-3">
+                        <h6>Albums Phase</h6>
+                        <RenderPhaseProgress Progress="@currentStatus.AlbumsProgress" />
+                    </div>
+                }
+
+                @if (currentStatus.PlaylistsProgress != null)
+                {
+                    <div class="mb-3">
+                        <h6>Playlists Phase</h6>
+                        <RenderPhaseProgress Progress="@currentStatus.PlaylistsProgress" />
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="text-center py-4">
+                    <h5 class="text-muted">No active sync operation</h5>
+                    @if (lastSync != null)
+                    {
+                        <p class="mt-3">
+                            Last sync: @lastSync.SyncType completed @lastSync.CompletedAt?.ToLocalTime().ToString("g")
+                            <br />
+                            <small class="text-muted">
+                                @(lastSync.TracksAdded ?? 0) tracks added, @(lastSync.TracksUpdated ?? 0) updated
+                            </small>
+                        </p>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Sync History -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Recent Sync History</h5>
+        </div>
+        <div class="card-body">
+            @if (isLoadingHistory)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (syncHistory.Count == 0)
+            {
+                <p class="text-muted text-center py-4">No sync history available</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Started</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                                <th>Tracks</th>
+                                <th>Artists</th>
+                                <th>Albums</th>
+                                <th>Playlists</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var history in syncHistory)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="badge @(history.SyncType == "Full" ? "bg-warning" : "bg-info")">
+                                            @history.SyncType
+                                        </span>
+                                    </td>
+                                    <td>@history.StartedAt.ToLocalTime().ToString("g")</td>
+                                    <td>@(history.DurationFormatted ?? "-")</td>
+                                    <td>
+                                        <span class="badge @GetStatusBadgeClass(history.Status)">
+                                            @history.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (history.TracksAdded.HasValue || history.TracksUpdated.HasValue)
+                                        {
+                                            <text>+@(history.TracksAdded ?? 0) / ~@(history.TracksUpdated ?? 0)</text>
+                                        }
+                                        else
+                                        {
+                                            <text>-</text>
+                                        }
+                                    </td>
+                                    <td>@(history.ArtistsAdded ?? 0)</td>
+                                    <td>@(history.AlbumsAdded ?? 0)</td>
+                                    <td>@(history.PlaylistsAdded ?? 0)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private SyncStatusDto currentStatus = new() { Status = "Idle", IsActive = false };
+    private List<SyncHistoryDto> syncHistory = new();
+    private SyncHistoryDto? lastSync = null;
+    
+    private bool isLoadingStatus = true;
+    private bool isLoadingHistory = true;
+    private bool isRefreshing = false;
+    private bool isStarting = false;
+    private string? errorMessage = null;
+    private string? successMessage = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        
+        // Auto-refresh every 5 seconds if sync is active
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                await Task.Delay(5000);
+                if (currentStatus.IsActive)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await LoadStatusSilently();
+                        StateHasChanged();
+                    });
+                }
+            }
+        });
+    }
+
+    private async Task LoadData()
+    {
+        await Task.WhenAll(LoadStatus(), LoadHistory(), LoadLastSync());
+    }
+
+    private async Task LoadStatus()
+    {
+        isLoadingStatus = true;
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IncrementalSyncOrchestrator>();
+            
+            var status = await orchestrator.GetCurrentSyncStatusAsync();
+            
+            if (status == null)
+            {
+                currentStatus = new SyncStatusDto { Status = "Idle", IsActive = false };
+            }
+            else
+            {
+                currentStatus = new SyncStatusDto
+                {
+                    SyncHistoryId = status.SyncHistoryId,
+                    StartedAt = status.StartedAt,
+                    Status = status.Status.ToString(),
+                    IsActive = true,
+                    TracksProgress = MapPhaseProgress(status.TracksProgress),
+                    ArtistsProgress = MapPhaseProgress(status.ArtistsProgress),
+                    AlbumsProgress = MapPhaseProgress(status.AlbumsProgress),
+                    PlaylistsProgress = MapPhaseProgress(status.PlaylistsProgress)
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load sync status");
+            errorMessage = "Failed to load sync status";
+        }
+        finally
+        {
+            isLoadingStatus = false;
+        }
+    }
+
+    private async Task LoadStatusSilently()
+    {
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IncrementalSyncOrchestrator>();
+            
+            var status = await orchestrator.GetCurrentSyncStatusAsync();
+            
+            if (status == null)
+            {
+                currentStatus = new SyncStatusDto { Status = "Idle", IsActive = false };
+            }
+            else
+            {
+                currentStatus = new SyncStatusDto
+                {
+                    SyncHistoryId = status.SyncHistoryId,
+                    StartedAt = status.StartedAt,
+                    Status = status.Status.ToString(),
+                    IsActive = true,
+                    TracksProgress = MapPhaseProgress(status.TracksProgress),
+                    ArtistsProgress = MapPhaseProgress(status.ArtistsProgress),
+                    AlbumsProgress = MapPhaseProgress(status.AlbumsProgress),
+                    PlaylistsProgress = MapPhaseProgress(status.PlaylistsProgress)
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to refresh sync status");
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        isLoadingHistory = true;
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            
+            var allHistory = await unitOfWork.SyncHistory.GetAllAsync();
+            syncHistory = allHistory
+                .OrderByDescending(h => h.StartedAt)
+                .Take(10)
+                .Select(h => new SyncHistoryDto
+                {
+                    Id = h.Id,
+                    SyncType = h.SyncType.ToString(),
+                    StartedAt = h.StartedAt,
+                    CompletedAt = h.CompletedAt,
+                    Status = h.Status.ToString(),
+                    ErrorMessage = h.ErrorMessage,
+                    TracksAdded = h.TracksAdded,
+                    TracksUpdated = h.TracksUpdated,
+                    ArtistsAdded = h.ArtistsAdded,
+                    AlbumsAdded = h.AlbumsAdded,
+                    PlaylistsAdded = h.PlaylistsSynced,
+                    DurationFormatted = FormatDuration(h.StartedAt, h.CompletedAt)
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load sync history");
+            errorMessage = "Failed to load sync history";
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task LoadLastSync()
+    {
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            
+            var allHistory = await unitOfWork.SyncHistory.GetAllAsync();
+            var lastSyncEntity = allHistory
+                .Where(h => h.Status == SpotifyTools.Domain.Enums.SyncStatus.Success)
+                .OrderByDescending(h => h.CompletedAt)
+                .FirstOrDefault();
+
+            if (lastSyncEntity != null)
+            {
+                lastSync = new SyncHistoryDto
+                {
+                    Id = lastSyncEntity.Id,
+                    SyncType = lastSyncEntity.SyncType.ToString(),
+                    StartedAt = lastSyncEntity.StartedAt,
+                    CompletedAt = lastSyncEntity.CompletedAt,
+                    Status = lastSyncEntity.Status.ToString(),
+                    ErrorMessage = lastSyncEntity.ErrorMessage,
+                    TracksAdded = lastSyncEntity.TracksAdded,
+                    TracksUpdated = lastSyncEntity.TracksUpdated,
+                    ArtistsAdded = lastSyncEntity.ArtistsAdded,
+                    AlbumsAdded = lastSyncEntity.AlbumsAdded,
+                    PlaylistsAdded = lastSyncEntity.PlaylistsSynced,
+                    DurationFormatted = FormatDuration(lastSyncEntity.StartedAt, lastSyncEntity.CompletedAt)
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load last sync");
+        }
+    }
+
+    private async Task RefreshStatus()
+    {
+        isRefreshing = true;
+        errorMessage = null;
+        await LoadData();
+        isRefreshing = false;
+    }
+
+    private async Task StartIncrementalSync()
+    {
+        isStarting = true;
+        errorMessage = null;
+        successMessage = null;
+        
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IncrementalSyncOrchestrator>();
+            var syncService = scope.ServiceProvider.GetRequiredService<ISyncService>();
+            
+            // Check if a sync is already running
+            var status = await orchestrator.GetCurrentSyncStatusAsync();
+            if (status != null)
+            {
+                errorMessage = "A sync operation is already in progress";
+                return;
+            }
+
+            // Start sync in background
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var bgScope = ServiceProvider.CreateScope();
+                    var bgSyncService = bgScope.ServiceProvider.GetRequiredService<ISyncService>();
+                    await bgSyncService.IncrementalSyncAsync();
+                    Logger.LogInformation("Incremental sync completed successfully");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Incremental sync failed");
+                }
+            });
+
+            successMessage = "Incremental sync started successfully";
+            await Task.Delay(1000);
+            await LoadStatus();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to start incremental sync");
+            errorMessage = "Failed to start sync";
+        }
+        finally
+        {
+            isStarting = false;
+        }
+    }
+
+    private async Task StartFullSync()
+    {
+        isStarting = true;
+        errorMessage = null;
+        successMessage = null;
+        
+        try
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IncrementalSyncOrchestrator>();
+            
+            // Check if a sync is already running
+            var status = await orchestrator.GetCurrentSyncStatusAsync();
+            if (status != null)
+            {
+                errorMessage = "A sync operation is already in progress";
+                return;
+            }
+
+            // Start sync in background
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var bgScope = ServiceProvider.CreateScope();
+                    var bgOrchestrator = bgScope.ServiceProvider.GetRequiredService<IncrementalSyncOrchestrator>();
+                    await bgOrchestrator.RunFullSyncAsync();
+                    Logger.LogInformation("Full sync completed successfully");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Full sync failed");
+                }
+            });
+
+            successMessage = "Full sync started successfully (this may take 30-45 minutes)";
+            await Task.Delay(1000);
+            await LoadStatus();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to start full sync");
+            errorMessage = "Failed to start sync";
+        }
+        finally
+        {
+            isStarting = false;
+        }
+    }
+
+    private PhaseProgressDto? MapPhaseProgress(PhaseProgress? progress)
+    {
+        if (progress == null)
+            return null;
+
+        return new PhaseProgressDto
+        {
+            Status = progress.Status.ToString(),
+            CurrentOffset = progress.CurrentOffset,
+            TotalItems = progress.TotalItems,
+            ItemsProcessed = progress.ItemsProcessed,
+            LastError = progress.LastError,
+            RateLimitResetAt = progress.RateLimitResetAt,
+            PercentComplete = progress.PercentComplete
+        };
+    }
+
+    private string? FormatDuration(DateTime startedAt, DateTime? completedAt)
+    {
+        if (!completedAt.HasValue)
+            return null;
+
+        var duration = completedAt.Value - startedAt;
+        
+        if (duration.TotalSeconds < 60)
+            return $"{duration.TotalSeconds:F0}s";
+        
+        if (duration.TotalMinutes < 60)
+            return $"{duration.TotalMinutes:F1}m";
+        
+        return $"{duration.TotalHours:F1}h";
+    }
+
+    private string GetStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Success" => "bg-success",
+            "InProgress" => "bg-primary",
+            "Failed" => "bg-danger",
+            "Cancelled" => "bg-secondary",
+            "RateLimited" => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+}
+
+@* Component for rendering phase progress *@
+@code {
+    private RenderFragment<PhaseProgressDto> RenderPhaseProgress => (progress) => __builder =>
+    {
+        <div>
+            <div class="d-flex justify-content-between mb-1">
+                <span>
+                    Status: <span class="badge @GetStatusBadgeClass(progress.Status)">@progress.Status</span>
+                </span>
+                <span class="text-muted">
+                    @progress.ItemsProcessed / @(progress.TotalItems?.ToString() ?? "?") items
+                </span>
+            </div>
+            <div class="progress mb-2" style="height: 25px;">
+                <div class="progress-bar @GetProgressBarClass(progress.Status)" 
+                     role="progressbar" 
+                     style="width: @progress.PercentComplete%"
+                     aria-valuenow="@progress.PercentComplete" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                    @progress.PercentComplete%
+                </div>
+            </div>
+            @if (progress.RateLimitResetAt.HasValue)
+            {
+                <small class="text-warning">
+                    ⚠️ Rate limited until @progress.RateLimitResetAt.Value.ToLocalTime().ToString("g")
+                </small>
+            }
+            @if (!string.IsNullOrEmpty(progress.LastError))
+            {
+                <small class="text-danger d-block mt-1">
+                    ❌ Error: @progress.LastError
+                </small>
+            }
+        </div>
+    };
+
+    private string GetProgressBarClass(string status)
+    {
+        return status switch
+        {
+            "Success" => "bg-success",
+            "InProgress" => "bg-primary progress-bar-striped progress-bar-animated",
+            "Failed" => "bg-danger",
+            "RateLimited" => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+}

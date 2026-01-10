@@ -1,0 +1,355 @@
+@inject IPlaylistService PlaylistService
+@inject ILogger<AddToPlaylistModal> Logger
+
+@if (IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <!-- Header -->
+                <div class="modal-header">
+                    <h5 class="modal-title">Add @TrackCount Track@(TrackCount > 1 ? "s" : "") to Playlist</h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+
+                <!-- Body -->
+                <div class="modal-body">
+                    @if (isLoadingPlaylists)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading playlists...</span>
+                            </div>
+                            <p class="text-muted mt-2 mb-0">Loading playlists...</p>
+                        </div>
+                    }
+                    else if (isAdding)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-success" role="status">
+                                <span class="visually-hidden">Adding tracks...</span>
+                            </div>
+                            <p class="text-muted mt-2 mb-0">Adding tracks to playlist...</p>
+                        </div>
+                    }
+                    else if (addSuccess)
+                    {
+                        <div class="alert alert-success mb-0">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            Successfully added @TracksAdded track@(TracksAdded > 1 ? "s" : "") to <strong>@selectedPlaylistName</strong>
+                            @if (DuplicatesSkipped > 0)
+                            {
+                                <div class="mt-2 small">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Skipped @DuplicatesSkipped duplicate track@(DuplicatesSkipped > 1 ? "s" : "") already in the playlist
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger mb-0">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            @errorMessage
+                        </div>
+                    }
+                    else if (!playlists.Any())
+                    {
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                            No playlists found. Create a playlist first!
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Playlist Selection -->
+                        <div class="mb-3">
+                            <label class="form-label">Select Playlist</label>
+                            <div class="list-group" style="max-height: 400px; overflow-y: auto;">
+                                @foreach (var playlist in playlists)
+                                {
+                                    <button type="button"
+                                            class="list-group-item list-group-item-action @(selectedPlaylistId == playlist.Id ? "active" : "")"
+                                            @onclick="() => SelectPlaylist(playlist.Id, playlist.Name)">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>@playlist.Name</strong>
+                                                @if (!string.IsNullOrEmpty(playlist.Description))
+                                                {
+                                                    <div class="small text-truncate" style="max-width: 300px;">
+                                                        @playlist.Description
+                                                    </div>
+                                                }
+                                            </div>
+                                            <span class="badge bg-secondary rounded-pill">@playlist.TrackCount</span>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Option: Create New Playlist -->
+                        <div class="border-top pt-3">
+                            <button type="button" class="btn btn-outline-primary btn-sm w-100" @onclick="ShowCreatePlaylist">
+                                <i class="bi bi-plus-circle me-1"></i>
+                                Create New Playlist
+                            </button>
+                        </div>
+
+                        <!-- Create New Playlist Form (collapsible) -->
+                        @if (showCreateForm)
+                        {
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <h6 class="mb-3">Create New Playlist</h6>
+                                <div class="mb-3">
+                                    <label class="form-label">Playlist Name</label>
+                                    <input type="text" class="form-control" @bind="newPlaylistName" placeholder="Enter playlist name" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Description (optional)</label>
+                                    <textarea class="form-control" rows="2" @bind="newPlaylistDescription" placeholder="Enter description"></textarea>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" @bind="newPlaylistIsPublic" id="publicCheck">
+                                    <label class="form-check-label" for="publicCheck">
+                                        Make this playlist public
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" @bind="syncToSpotify" id="syncCheck">
+                                    <label class="form-check-label" for="syncCheck">
+                                        <strong>Sync to Spotify</strong>
+                                        <small class="d-block text-muted">Create this playlist on your Spotify account</small>
+                                    </label>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-success btn-sm flex-grow-1" @onclick="CreateAndAddToPlaylist">
+                                        <i class="bi bi-check-circle me-1"></i>
+                                        Create & Add Tracks
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" @onclick="HideCreatePlaylist">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <!-- Footer -->
+                <div class="modal-footer">
+                    @if (addSuccess)
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="Close">Done</button>
+                    }
+                    else if (!isLoadingPlaylists && !isAdding)
+                    {
+                        <button type="button" class="btn btn-secondary" @onclick="Close">Cancel</button>
+                        <button type="button" 
+                                class="btn btn-primary" 
+                                @onclick="AddToPlaylist"
+                                disabled="@(string.IsNullOrEmpty(selectedPlaylistId) || showCreateForm)">
+                            <i class="bi bi-plus-circle me-1"></i>
+                            Add Tracks
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public List<string> TrackIds { get; set; } = new();
+
+    [Parameter]
+    public bool IsVisible { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnTracksAdded { get; set; }
+
+    private int TrackCount => TrackIds.Count;
+
+    private List<PlaylistDto> playlists = new();
+    private string? selectedPlaylistId;
+    private string? selectedPlaylistName;
+    private bool isLoadingPlaylists = false;
+    private bool isAdding = false;
+    private bool addSuccess = false;
+    private int TracksAdded = 0;
+    private int DuplicatesSkipped = 0;
+    private string? errorMessage;
+
+    // Create playlist form
+    private bool showCreateForm = false;
+    private string newPlaylistName = string.Empty;
+    private string newPlaylistDescription = string.Empty;
+    private bool newPlaylistIsPublic = false;
+    private bool syncToSpotify = true; // Default to true - most users want Spotify sync
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && !isLoadingPlaylists && playlists.Count == 0)
+        {
+            await LoadPlaylists();
+        }
+
+        // Reset state when modal opens
+        if (IsVisible)
+        {
+            addSuccess = false;
+            errorMessage = null;
+            selectedPlaylistId = null;
+            selectedPlaylistName = null;
+            showCreateForm = false;
+        }
+    }
+
+    private async Task LoadPlaylists()
+    {
+        isLoadingPlaylists = true;
+        try
+        {
+            playlists = await PlaylistService.GetAllPlaylistsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading playlists");
+            errorMessage = "Failed to load playlists. Please try again.";
+        }
+        finally
+        {
+            isLoadingPlaylists = false;
+        }
+    }
+
+    private void SelectPlaylist(string playlistId, string playlistName)
+    {
+        selectedPlaylistId = playlistId;
+        selectedPlaylistName = playlistName;
+    }
+
+    private async Task AddToPlaylist()
+    {
+        if (string.IsNullOrEmpty(selectedPlaylistId))
+            return;
+
+        isAdding = true;
+        errorMessage = null;
+
+        try
+        {
+            // Get existing tracks in playlist to detect duplicates
+            var playlistDetail = await PlaylistService.GetPlaylistByIdAsync(selectedPlaylistId);
+            var existingTrackIds = playlistDetail?.Tracks.Select(t => t.Id).ToHashSet() ?? new HashSet<string>();
+
+            var tracksToAdd = TrackIds.Where(id => !existingTrackIds.Contains(id)).ToList();
+            DuplicatesSkipped = TrackIds.Count - tracksToAdd.Count;
+
+            if (tracksToAdd.Any())
+            {
+                await PlaylistService.AddTracksToPlaylistAsync(selectedPlaylistId, tracksToAdd);
+                TracksAdded = tracksToAdd.Count;
+                addSuccess = true;
+
+                // Notify parent component
+                await OnTracksAdded.InvokeAsync(true);
+            }
+            else
+            {
+                errorMessage = "All selected tracks are already in this playlist.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error adding tracks to playlist {PlaylistId}", selectedPlaylistId);
+            errorMessage = "Failed to add tracks. Please try again.";
+        }
+        finally
+        {
+            isAdding = false;
+        }
+    }
+
+    private void ShowCreatePlaylist()
+    {
+        showCreateForm = true;
+        newPlaylistName = string.Empty;
+        newPlaylistDescription = string.Empty;
+        newPlaylistIsPublic = false;
+    }
+
+    private void HideCreatePlaylist()
+    {
+        showCreateForm = false;
+    }
+
+    private async Task CreateAndAddToPlaylist()
+    {
+        if (string.IsNullOrWhiteSpace(newPlaylistName))
+        {
+            errorMessage = "Please enter a playlist name.";
+            return;
+        }
+
+        isAdding = true;
+        errorMessage = null;
+
+        try
+        {
+            // Create the playlist (with optional Spotify sync)
+            var request = new CreatePlaylistRequest
+            {
+                Name = newPlaylistName,
+                Description = newPlaylistDescription,
+                IsPublic = newPlaylistIsPublic
+            };
+
+            PlaylistDto newPlaylist;
+            if (syncToSpotify)
+            {
+                newPlaylist = await PlaylistService.CreateAndSyncPlaylistAsync(request);
+                Logger.LogInformation("Created and synced playlist '{PlaylistName}' to Spotify: {SpotifyId}",
+                    newPlaylist.Name, newPlaylist.SpotifyId);
+            }
+            else
+            {
+                newPlaylist = await PlaylistService.CreatePlaylistAsync(request);
+                Logger.LogInformation("Created local playlist '{PlaylistName}'", newPlaylist.Name);
+            }
+
+            // Add tracks to the new playlist
+            await PlaylistService.AddTracksToPlaylistAsync(newPlaylist.Id, TrackIds);
+
+            TracksAdded = TrackIds.Count;
+            DuplicatesSkipped = 0;
+            selectedPlaylistName = newPlaylist.Name;
+            addSuccess = true;
+
+            // Refresh playlist list
+            await LoadPlaylists();
+
+            // Notify parent
+            await OnTracksAdded.InvokeAsync(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating playlist and adding tracks");
+            errorMessage = "Failed to create playlist. Please try again.";
+        }
+        finally
+        {
+            isAdding = false;
+            showCreateForm = false;
+        }
+    }
+
+    private void Close()
+    {
+        OnClose.InvokeAsync();
+    }
+}

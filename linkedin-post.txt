@@ -1,0 +1,35 @@
+**Building with AI: Reflections on a 6-Week Journey with Claude**
+
+I just wrapped up a passion project that turned into an unexpected masterclass in AI-assisted development.
+
+**The Project:** A C# tool that syncs your entire Spotify library to PostgreSQL and uses intelligent genre clustering to auto-organize your music into playlists. Think: 3,000+ tracks, multi-project clean architecture, EF Core, and a beautiful CLI interface.
+
+**The Twist:** I built 95% of it through conversations with Claude Code.
+
+**What I learned:**
+
+🧠 **AI as a thinking partner, not just a code generator.** The real value wasn't "write me a function" — it was iterative refinement. When Spotify restricted their audio features API mid-project, we pivoted strategy together. When a critical bug caused playlist tracks to disappear, we debugged systematically through root cause analysis.
+
+⚙️ **Clean architecture matters more with AI.** Clear separation of concerns (Domain → Data → Sync → Analytics → CLI) made it easier to have focused conversations. "Fix the incremental sync logic in SyncService" beats "make the app work better."
+
+🔄 **The feedback loop is everything.** My most productive sessions weren't when Claude wrote perfect code on the first try — they were when I tested, reported specific failures, and we iterated. Real-world constraints (API rate limits, database foreign keys, EF Core quirks) shaped better solutions than hypotheticals.
+
+📚 **Documentation becomes executable context.** I maintained CLAUDE.md as a living reference doc. Every bug fix, architectural decision, and API limitation went in there. Later conversations became dramatically more efficient because Claude could reference exact implementation details.
+
+**The surprising parts:**
+
+- Genre clustering required *human taste*. Claude generated clusters, but I had to refine them interactively because "hard bop ≠ smooth jazz" isn't in any training data.
+- OAuth flows and PostgreSQL migrations "just worked" with minimal debugging
+- The CLI UX (Spectre.Console) evolved through dozens of micro-iterations I wouldn't have had patience for solo
+
+**Open questions I'm still pondering:**
+
+1. How do you balance AI velocity with long-term maintainability?
+2. When is it better to struggle through a problem yourself vs. asking AI?
+3. What new skills become critical when AI handles implementation details?
+
+I'm curious: for those working with AI coding assistants, what workflows or mental models have you found most effective?
+
+[Project: https://github.com/[your-handle]/spotify_tools]
+
+#AI #SoftwareDevelopment #CSharp #DeveloperTools #LLMs #MachineLearning
