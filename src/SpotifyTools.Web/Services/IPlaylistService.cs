@@ -23,9 +23,9 @@ public interface IPlaylistService
     Task<PlaylistDto> CreatePlaylistAsync(CreatePlaylistRequest request);
 
     /// <summary>
-    /// Create a new playlist and sync it to Spotify immediately
+    /// Create a new playlist and sync it to Spotify immediately with the specified tracks
     /// </summary>
-    Task<PlaylistDto> CreateAndSyncPlaylistAsync(CreatePlaylistRequest request);
+    Task<PlaylistDto> CreateAndSyncPlaylistAsync(CreatePlaylistRequest request, List<string> trackIds);
 
     /// <summary>
     /// Add tracks to a playlist

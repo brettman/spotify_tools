@@ -312,18 +312,18 @@
             PlaylistDto newPlaylist;
             if (syncToSpotify)
             {
-                newPlaylist = await PlaylistService.CreateAndSyncPlaylistAsync(request);
+                // CreateAndSyncPlaylistAsync adds tracks internally before syncing
+                newPlaylist = await PlaylistService.CreateAndSyncPlaylistAsync(request, TrackIds);
                 Logger.LogInformation("Created and synced playlist '{PlaylistName}' to Spotify: {SpotifyId}",
                     newPlaylist.Name, newPlaylist.SpotifyId);
             }
             else
             {
+                // For local-only playlists, create then add tracks separately
                 newPlaylist = await PlaylistService.CreatePlaylistAsync(request);
+                await PlaylistService.AddTracksToPlaylistAsync(newPlaylist.Id, TrackIds);
                 Logger.LogInformation("Created local playlist '{PlaylistName}'", newPlaylist.Name);
             }
-
-            // Add tracks to the new playlist
-            await PlaylistService.AddTracksToPlaylistAsync(newPlaylist.Id, TrackIds);
 
             TracksAdded = TrackIds.Count;
             DuplicatesSkipped = 0;

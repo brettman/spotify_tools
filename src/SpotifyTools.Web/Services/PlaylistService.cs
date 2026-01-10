@@ -267,16 +267,20 @@ public class PlaylistService : IPlaylistService
         }
     }
 
-    public async Task<PlaylistDto> CreateAndSyncPlaylistAsync(CreatePlaylistRequest request)
+    public async Task<PlaylistDto> CreateAndSyncPlaylistAsync(CreatePlaylistRequest request, List<string> trackIds)
     {
         try
         {
             // Create playlist locally first
             var playlistDto = await CreatePlaylistAsync(request);
 
+            // Add tracks BEFORE syncing (sync requires tracks to exist)
+            await AddTracksToPlaylistAsync(playlistDto.Id, trackIds);
+
             // Sync to Spotify
             var spotifyPlaylistId = await SyncPlaylistToSpotifyAsync(playlistDto.Id);
             playlistDto.SpotifyId = spotifyPlaylistId;
+            playlistDto.TrackCount = trackIds.Count;
 
             return playlistDto;
         }
