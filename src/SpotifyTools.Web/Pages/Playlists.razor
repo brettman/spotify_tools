@@ -50,6 +50,7 @@
         <div class="col-md-3">
             <select class="form-select" @bind="filterType" @bind:after="FilterPlaylists">
                 <option value="all">All Playlists (@allPlaylists.Count)</option>
+                <option value="modified">Has Changes (@allPlaylists.Count(p => HasUnsyncedChanges(p)))</option>
                 <option value="local">Local Only (@allPlaylists.Count(p => IsGuid(p.Id)))</option>
                 <option value="synced">On Spotify (@allPlaylists.Count(p => !IsGuid(p.Id)))</option>
                 <option value="empty">Empty Playlists (@allPlaylists.Count(p => p.TrackCount == 0))</option>
@@ -481,6 +482,7 @@
         // Apply type filter
         filtered = filterType switch
         {
+            "modified" => filtered.Where(p => HasUnsyncedChanges(p)),
             "local" => filtered.Where(p => IsGuid(p.Id)),
             "synced" => filtered.Where(p => !IsGuid(p.Id)),
             "empty" => filtered.Where(p => p.TrackCount == 0),
@@ -520,5 +522,10 @@
     private bool IsGuid(string id)
     {
         return Guid.TryParse(id, out _);
+    }
+
+    private bool HasUnsyncedChanges(PlaylistDto playlist)
+    {
+        return playlist.LastModifiedAt > playlist.LastSyncedAt;
     }
 }
