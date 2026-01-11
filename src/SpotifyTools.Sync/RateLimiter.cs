@@ -46,6 +46,7 @@ public class RateLimiter
             if (_consecutiveRateLimitHits > 0)
             {
                 _consecutiveRateLimitHits = 0;
+                _backoffUntil = DateTime.MinValue; // Clear the backoff timestamp
                 Console.WriteLine("✓ Rate limit backoff reset - requests flowing normally");
             }
         }
