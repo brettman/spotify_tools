@@ -1,0 +1,76 @@
+/* Playlist Modal Light Theme Overrides */
+/* Keep Bootstrap light theme in modals - override Spotify dark theme */
+
+.modal-content {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+}
+
+.modal-content .table {
+    color: #212529 !important;
+    background-color: #ffffff !important;
+}
+
+.modal-content .table thead th {
+    color: #6c757d !important;
+    background-color: #ffffff !important;
+    border-bottom: 2px solid #dee2e6 !important;
+}
+
+.modal-content .table tbody tr {
+    background-color: #ffffff !important;
+}
+
+.modal-content .table tbody tr:hover {
+    background-color: #f8f9fa !important;
+}
+
+.modal-content .table td {
+    color: #212529 !important;
+    border-color: #dee2e6 !important;
+}
+
+.modal-content .table td strong {
+    color: #212529 !important;
+}
+
+.modal-content .table td.text-muted,
+.modal-content .table .text-muted {
+    color: #6c757d !important;
+}
+
+/* Modal component light theme */
+.modal-header {
+    background-color: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    color: #212529 !important;
+}
+
+.modal-title {
+    color: #212529 !important;
+}
+
+.modal-footer {
+    background-color: #ffffff !important;
+    border-top: 1px solid #dee2e6 !important;
+}
+
+.modal-body {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+}
+
+.modal-body p,
+.modal-body strong,
+.modal-body h6 {
+    color: #212529 !important;
+}
+
+.modal-body .text-muted {
+    color: #6c757d !important;
+}
+
+.modal-body .badge {
+    color: #ffffff !important;
+}
+

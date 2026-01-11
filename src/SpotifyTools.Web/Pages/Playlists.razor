@@ -1,8 +1,13 @@
 @page "/playlists"
 @using SpotifyTools.Web.Services
 @using SpotifyTools.Web.DTOs
+@using SpotifyTools.Domain.Entities
+@using SpotifyTools.Data.Repositories
+@using SpotifyTools.Analytics
 
 @inject IPlaylistService PlaylistService
+@inject IAnalyticsService AnalyticsService
+@inject ISavedClusterRepository SavedClusterRepository
 @inject ILogger<Playlists> Logger
 @inject NavigationManager Navigation
 
@@ -65,6 +70,29 @@
         </div>
     </div>
 
+    <!-- Genre and Cluster Filters -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <SearchableMultiSelect TItem="string"
+                                 Label="Filter by Genres"
+                                 Placeholder="Search genres..."
+                                 Items="@allGenres"
+                                 SelectedItems="@selectedGenres"
+                                 SelectedItemsChanged="@OnGenreSelectionChanged"
+                                 GetDisplayText="@(genre => genre)" />
+        </div>
+        <div class="col-md-6">
+            <SearchableMultiSelect TItem="SavedCluster"
+                                 Label="Filter by Genre Clusters"
+                                 Placeholder="Search clusters..."
+                                 Items="@savedClusters"
+                                 SelectedItems="@selectedClusters"
+                                 SelectedItemsChanged="@OnClusterSelectionChanged"
+                                 GetDisplayText="@(cluster => cluster.Name)"
+                                 GetSubText="@(cluster => $"{cluster.GetGenresList().Count} genres")" />
+        </div>
+    </div>
+
     @if (isLoading && playlists.Count == 0)
     {
         <div class="text-center p-5">
@@ -109,6 +137,7 @@
                             <th>Status</th>
                             <th>Name</th>
                             <th>Description</th>
+                            <th>Genres</th>
                             <th>Tracks</th>
                             <th>Type</th>
                             <th>Actions</th>
@@ -151,6 +180,25 @@
                                 </td>
                                 <td>
                                     <span class="text-muted">@(playlist.Description ?? "-")</span>
+                                </td>
+                                <td>
+                                    @if (playlist.TopGenres != null && playlist.TopGenres.Any())
+                                    {
+                                        <div class="d-flex flex-wrap gap-1">
+                                            @foreach (var genre in playlist.TopGenres)
+                                            {
+                                                <span class="badge bg-secondary">@genre</span>
+                                            }
+                                            @if (playlist.TotalGenreCount > 3)
+                                            {
+                                                <span class="badge bg-light text-muted">+@(playlist.TotalGenreCount - 3) more</span>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">No genres</span>
+                                    }
                                 </td>
                                 <td>
                                     <span class="badge bg-info rounded-pill">@playlist.TrackCount</span>
@@ -296,6 +344,63 @@
                             </p>
                         </div>
 
+                        @if (playlistDetail.AllGenres != null && playlistDetail.AllGenres.Any())
+                        {
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">Genre Breakdown</h6>
+                                    @if (modalSelectedGenres.Any())
+                                    {
+                                        <button class="btn btn-sm btn-link p-0" @onclick="ClearModalGenreFilter">
+                                            Clear Filter (@filteredTracks.Count/@playlistDetail.Tracks.Count tracks)
+                                        </button>
+                                    }
+                                </div>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @{
+                                        var genreCounts = playlistDetail.Tracks
+                                            .SelectMany(t => t.Genres)
+                                            .Where(g => !string.IsNullOrWhiteSpace(g))
+                                            .GroupBy(g => g)
+                                            .Select(g => new { Genre = g.Key, Count = g.Count() })
+                                            .OrderByDescending(x => x.Count)
+                                            .Take(10)
+                                            .ToList();
+                                        
+                                        var totalGenreOccurrences = genreCounts.Sum(g => g.Count);
+                                    }
+                                    @foreach (var genreCount in genreCounts)
+                                    {
+                                        var percentage = (genreCount.Count * 100.0 / totalGenreOccurrences);
+                                        var isSelected = modalSelectedGenres.Contains(genreCount.Genre);
+                                        var badgeClass = isSelected ? "badge bg-primary" : "badge bg-secondary";
+                                        <span class="@badgeClass" 
+                                              style="cursor: pointer;" 
+                                              title="@genreCount.Count tracks - Click to filter"
+                                              @onclick="() => ToggleModalGenreFilter(genreCount.Genre)">
+                                            @genreCount.Genre (@percentage.ToString("F1")%)
+                                            @if (isSelected)
+                                            {
+                                                <i class="bi bi-x-circle ms-1"></i>
+                                            }
+                                        </span>
+                                    }
+                                    @if (playlistDetail.TotalGenreCount > 10)
+                                    {
+                                        <span class="badge bg-light text-muted">+@(playlistDetail.TotalGenreCount - 10) more</span>
+                                    }
+                                </div>
+                                @if (modalSelectedGenres.Any())
+                                {
+                                    <div class="alert alert-info mt-2 py-2 px-3 small mb-0">
+                                        <i class="bi bi-funnel-fill me-1"></i>
+                                        Showing @filteredTracks.Count of @playlistDetail.Tracks.Count tracks matching: 
+                                        <strong>@string.Join(", ", modalSelectedGenres)</strong>
+                                    </div>
+                                }
+                            </div>
+                        }
+
                         @if (playlistDetail.Tracks.Any())
                         {
                             <h6 class="mt-3 mb-2">Tracks</h6>
@@ -311,21 +416,32 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @for (int i = 0; i < playlistDetail.Tracks.Count; i++)
+                                        @if (filteredTracks.Any())
                                         {
-                                            var track = playlistDetail.Tracks[i];
+                                            @for (int i = 0; i < filteredTracks.Count; i++)
+                                            {
+                                                var track = filteredTracks[i];
+                                                <tr>
+                                                    <td class="text-muted">@(i + 1)</td>
+                                                    <td>
+                                                        <strong>@track.Name</strong>
+                                                        @if (track.Explicit)
+                                                        {
+                                                            <span class="badge badge-sm bg-secondary ms-1">E</span>
+                                                        }
+                                                    </td>
+                                                    <td>@string.Join(", ", track.Artists.Select(a => a.Name))</td>
+                                                    <td class="text-muted small">@track.AlbumName</td>
+                                                    <td class="text-muted small">@FormatDuration(track.DurationMs)</td>
+                                                </tr>
+                                            }
+                                        }
+                                        else
+                                        {
                                             <tr>
-                                                <td class="text-muted">@(i + 1)</td>
-                                                <td>
-                                                    <strong>@track.Name</strong>
-                                                    @if (track.Explicit)
-                                                    {
-                                                        <span class="badge badge-sm bg-secondary ms-1">E</span>
-                                                    }
+                                                <td colspan="5" class="text-center text-muted py-3">
+                                                    No tracks match the selected genre filter.
                                                 </td>
-                                                <td>@string.Join(", ", track.Artists.Select(a => a.Name))</td>
-                                                <td class="text-muted small">@track.AlbumName</td>
-                                                <td class="text-muted small">@FormatDuration(track.DurationMs)</td>
                                             </tr>
                                         }
                                     </tbody>
@@ -359,14 +475,24 @@
     private string filterType = "all";
     private string sortBy = "name";
 
+    // Genre and cluster filters
+    private List<string> allGenres = new();
+    private HashSet<string> selectedGenres = new();
+    private List<SavedCluster> savedClusters = new();
+    private HashSet<SavedCluster> selectedClusters = new();
+
     // Detail modal
     private PlaylistDto? selectedPlaylistForView;
     private PlaylistDetailDto? playlistDetail;
     private bool loadingDetail = false;
+    private HashSet<string> modalSelectedGenres = new();
+    private List<TrackDto> filteredTracks = new();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadPlaylists();
+        await LoadGenres();
+        await LoadClusters();
     }
 
     private async Task LoadPlaylists()
@@ -387,6 +513,33 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task LoadGenres()
+    {
+        try
+        {
+            var genreData = await AnalyticsService.GetAllGenresAsync();
+            allGenres = genreData.Select(g => g.Genre).OrderBy(g => g).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading genres");
+            // Don't set error message, just log - this is not critical
+        }
+    }
+
+    private async Task LoadClusters()
+    {
+        try
+        {
+            savedClusters = await SavedClusterRepository.GetAllOrderedAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading saved clusters");
+            // Don't set error message, just log - this is not critical
         }
     }
 
@@ -428,10 +581,15 @@
 
         loadingDetail = true;
         playlistDetail = null;
+        modalSelectedGenres.Clear();
 
         try
         {
             playlistDetail = await PlaylistService.GetPlaylistByIdAsync(playlistId);
+            if (playlistDetail != null)
+            {
+                filteredTracks = playlistDetail.Tracks;
+            }
         }
         catch (Exception ex)
         {
@@ -449,6 +607,46 @@
     {
         selectedPlaylistForView = null;
         playlistDetail = null;
+        modalSelectedGenres.Clear();
+        filteredTracks.Clear();
+    }
+
+    private void ToggleModalGenreFilter(string genre)
+    {
+        if (modalSelectedGenres.Contains(genre))
+        {
+            modalSelectedGenres.Remove(genre);
+        }
+        else
+        {
+            modalSelectedGenres.Add(genre);
+        }
+        
+        FilterModalTracks();
+    }
+
+    private void ClearModalGenreFilter()
+    {
+        modalSelectedGenres.Clear();
+        FilterModalTracks();
+    }
+
+    private void FilterModalTracks()
+    {
+        if (playlistDetail == null) return;
+
+        if (modalSelectedGenres.Any())
+        {
+            // Filter tracks that have at least one of the selected genres
+            filteredTracks = playlistDetail.Tracks
+                .Where(t => t.Genres.Any(g => modalSelectedGenres.Contains(g, StringComparer.OrdinalIgnoreCase)))
+                .ToList();
+        }
+        else
+        {
+            // Show all tracks if no genre filter
+            filteredTracks = playlistDetail.Tracks;
+        }
     }
 
     private async Task DeletePlaylist(string playlistId)
@@ -489,6 +687,29 @@
             _ => filtered
         };
 
+        // Apply genre filter (AND logic - playlist must have ALL selected genres)
+        if (selectedGenres.Any())
+        {
+            filtered = filtered.Where(p =>
+                p.AllGenres != null &&
+                selectedGenres.All(sg => p.AllGenres.Contains(sg, StringComparer.OrdinalIgnoreCase)));
+        }
+
+        // Apply cluster filter (AND logic - playlist must match ALL selected clusters)
+        if (selectedClusters.Any())
+        {
+            filtered = filtered.Where(p =>
+            {
+                if (p.AllGenres == null || !p.AllGenres.Any())
+                    return false;
+
+                // For each selected cluster, check if playlist has at least one genre from that cluster
+                return selectedClusters.All(cluster =>
+                    cluster.GetGenresList().Any(clusterGenre =>
+                        p.AllGenres.Contains(clusterGenre, StringComparer.OrdinalIgnoreCase)));
+            });
+        }
+
         playlists = filtered.ToList();
         SortPlaylists();
     }
@@ -527,5 +748,19 @@
     private bool HasUnsyncedChanges(PlaylistDto playlist)
     {
         return playlist.LastModifiedAt > playlist.LastSyncedAt;
+    }
+
+    private async Task OnGenreSelectionChanged(HashSet<string> genres)
+    {
+        selectedGenres = genres;
+        FilterPlaylists();
+        await Task.CompletedTask;
+    }
+
+    private async Task OnClusterSelectionChanged(HashSet<SavedCluster> clusters)
+    {
+        selectedClusters = clusters;
+        FilterPlaylists();
+        await Task.CompletedTask;
     }
 }

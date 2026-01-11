@@ -10,6 +10,11 @@ public class PlaylistDto
     public string? SpotifyId { get; set; }
     public DateTime LastSyncedAt { get; set; }
     public DateTime LastModifiedAt { get; set; }
+
+    // Genre properties for display and filtering
+    public List<string> TopGenres { get; set; } = new();
+    public List<string> AllGenres { get; set; } = new();
+    public int TotalGenreCount { get; set; }
 }
 
 public class PlaylistDetailDto : PlaylistDto

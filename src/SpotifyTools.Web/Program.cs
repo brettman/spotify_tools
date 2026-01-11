@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SpotifyClientService;
 using SpotifyTools.Analytics;
 using SpotifyTools.Data.DbContext;
+using SpotifyTools.Data.Repositories;
 using SpotifyTools.Data.Repositories.Implementations;
 using SpotifyTools.Data.Repositories.Interfaces;
 using SpotifyTools.Sync;
@@ -35,6 +36,7 @@ builder.Services.AddDbContext<SpotifyDbContext>(options =>
 // Data layer - Unit of Work and Repositories
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ISyncStateRepository, SyncStateRepository>();
+builder.Services.AddScoped<ISavedClusterRepository, SavedClusterRepository>();
 builder.Services.AddScoped<SpotifyTools.Sync.Services.IRateLimitTracker, SpotifyTools.Sync.Services.RateLimitTracker>();
 
 // Spotify client service

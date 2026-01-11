@@ -47,6 +47,48 @@ public class PlaylistService : IPlaylistService
                 })
                 .ToListAsync();
 
+            // Load genre data for all playlists in a single query
+            var playlistGenreData = await _dbContext.PlaylistTracks
+                .Where(pt => playlists.Select(p => p.Id).Contains(pt.PlaylistId))
+                .Select(pt => new
+                {
+                    PlaylistId = pt.PlaylistId,
+                    Genres = pt.Track.TrackArtists
+                        .SelectMany(ta => ta.Artist.Genres)
+                        .ToList()
+                })
+                .ToListAsync();
+
+            // Aggregate genres per playlist in memory
+            var playlistGenresMap = playlistGenreData
+                .GroupBy(pg => pg.PlaylistId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.SelectMany(pg => pg.Genres)
+                        .Where(genre => !string.IsNullOrWhiteSpace(genre))
+                        .GroupBy(genre => genre)
+                        .Select(genreGroup => new { Genre = genreGroup.Key, Count = genreGroup.Count() })
+                        .OrderByDescending(x => x.Count)
+                        .ToList()
+                );
+
+            // Populate genre properties for each playlist
+            foreach (var playlist in playlists)
+            {
+                if (playlistGenresMap.TryGetValue(playlist.Id, out var genreStats))
+                {
+                    playlist.AllGenres = genreStats.Select(g => g.Genre).ToList();
+                    playlist.TopGenres = genreStats.Take(3).Select(g => g.Genre).ToList();
+                    playlist.TotalGenreCount = genreStats.Count;
+                }
+                else
+                {
+                    playlist.AllGenres = new List<string>();
+                    playlist.TopGenres = new List<string>();
+                    playlist.TotalGenreCount = 0;
+                }
+            }
+
             return playlists;
         }
         catch (Exception ex)
@@ -106,6 +148,22 @@ public class PlaylistService : IPlaylistService
                     TotalDurationMs = p.PlaylistTracks.Sum(pt => pt.Track.DurationMs)
                 })
                 .FirstOrDefaultAsync();
+
+            // Calculate genre distribution if playlist exists
+            if (playlist != null && playlist.Tracks.Any())
+            {
+                var allGenres = playlist.Tracks
+                    .SelectMany(t => t.Genres)
+                    .Where(g => !string.IsNullOrWhiteSpace(g))
+                    .GroupBy(g => g)
+                    .Select(g => new { Genre = g.Key, Count = g.Count() })
+                    .OrderByDescending(x => x.Count)
+                    .ToList();
+
+                playlist.AllGenres = allGenres.Select(g => g.Genre).ToList();
+                playlist.TopGenres = allGenres.Take(3).Select(g => g.Genre).ToList();
+                playlist.TotalGenreCount = allGenres.Count;
+            }
 
             return playlist;
         }

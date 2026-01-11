@@ -1,0 +1,210 @@
+@typeparam TItem
+
+<div class="searchable-multiselect">
+    <label class="form-label small" style="color: var(--text-secondary, #B3B3B3);">@Label</label>
+    
+    <!-- Search input -->
+    <div class="input-group mb-2">
+        <span class="input-group-text">
+            <i class="bi bi-search"></i>
+        </span>
+        <input type="text"
+               class="form-control"
+               placeholder="@Placeholder"
+               @bind="searchQuery"
+               @bind:event="oninput"
+               @bind:after="FilterItems" />
+        @if (!string.IsNullOrEmpty(searchQuery))
+        {
+            <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                <i class="bi bi-x"></i>
+            </button>
+        }
+    </div>
+
+    <!-- Selected items as chips -->
+    @if (SelectedItems.Any())
+    {
+        <div class="selected-chips mb-2">
+            @foreach (var item in SelectedItems)
+            {
+                <span class="badge bg-primary me-1 mb-1">
+                    @GetDisplayText(item)
+                    <button type="button" class="btn-close btn-close-white ms-1" style="font-size: 0.6rem;"
+                            @onclick="() => RemoveItem(item)"></button>
+                </span>
+            }
+            <button class="btn btn-link btn-sm p-0 ms-2" @onclick="ClearAll">Clear All</button>
+        </div>
+    }
+    else
+    {
+        <div class="small mb-2" style="color: var(--text-subdued, #6A6A6A);">No items selected</div>
+    }
+
+    <!-- Dropdown list -->
+    @if (filteredItems.Any())
+    {
+        <div class="dropdown-list border rounded" style="max-height: 200px; overflow-y: auto;">
+            @foreach (var item in filteredItems)
+            {
+                var isSelected = SelectedItems.Contains(item);
+                <div class="dropdown-item @(isSelected ? "active" : "")" 
+                     style="cursor: pointer;"
+                     @onclick="() => ToggleItem(item)">
+                    <input type="checkbox" 
+                           class="form-check-input me-2" 
+                           checked="@isSelected"
+                           @onclick:stopPropagation />
+                    @GetDisplayText(item)
+                    @if (GetSubText != null)
+                    {
+                        <small class="ms-2" style="color: var(--text-subdued, #6A6A6A);">@GetSubText(item)</small>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(searchQuery))
+    {
+        <div class="alert alert-info small mb-0">
+            No items match your search.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Select Items";
+    [Parameter] public string Placeholder { get; set; } = "Search...";
+    [Parameter] public List<TItem> Items { get; set; } = new();
+    [Parameter] public HashSet<TItem> SelectedItems { get; set; } = new();
+    [Parameter] public EventCallback<HashSet<TItem>> SelectedItemsChanged { get; set; }
+    [Parameter] public Func<TItem, string> GetDisplayText { get; set; } = item => item?.ToString() ?? "";
+    [Parameter] public Func<TItem, string>? GetSubText { get; set; }
+
+    private string searchQuery = string.Empty;
+    private List<TItem> filteredItems = new();
+
+    protected override void OnParametersSet()
+    {
+        FilterItems();
+    }
+
+    private void FilterItems()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filteredItems = Items.ToList();
+        }
+        else
+        {
+            filteredItems = Items
+                .Where(item => GetDisplayText(item).Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    private async Task ToggleItem(TItem item)
+    {
+        if (SelectedItems.Contains(item))
+        {
+            SelectedItems.Remove(item);
+        }
+        else
+        {
+            SelectedItems.Add(item);
+        }
+        await SelectedItemsChanged.InvokeAsync(SelectedItems);
+    }
+
+    private async Task RemoveItem(TItem item)
+    {
+        SelectedItems.Remove(item);
+        await SelectedItemsChanged.InvokeAsync(SelectedItems);
+    }
+
+    private async Task ClearAll()
+    {
+        SelectedItems.Clear();
+        await SelectedItemsChanged.InvokeAsync(SelectedItems);
+    }
+
+    private void ClearSearch()
+    {
+        searchQuery = string.Empty;
+        FilterItems();
+    }
+}
+
+<style>
+    .searchable-multiselect .selected-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .searchable-multiselect .dropdown-list {
+        background-color: var(--spotify-elevated, #181818);
+        color: var(--text-primary, #FFFFFF);
+    }
+
+    .searchable-multiselect .dropdown-item {
+        padding: 0.5rem 1rem;
+        color: var(--text-primary, #FFFFFF);
+    }
+
+    .searchable-multiselect .dropdown-item:hover {
+        background-color: var(--spotify-highlight, #282828);
+    }
+
+    .searchable-multiselect .dropdown-item.active {
+        background-color: rgba(29, 185, 84, 0.1);
+        color: var(--text-primary, #FFFFFF);
+    }
+
+    .searchable-multiselect .badge .btn-close {
+        padding: 0;
+        background-size: 0.5rem;
+    }
+
+    .searchable-multiselect .form-control {
+        background-color: var(--spotify-highlight, #282828);
+        border-color: var(--border-subtle, #404040);
+        color: var(--text-primary, #FFFFFF);
+    }
+
+    .searchable-multiselect .form-control:focus {
+        background-color: var(--spotify-highlight-elevated, #2A2A2A);
+        border-color: var(--spotify-green, #1DB954);
+        color: var(--text-primary, #FFFFFF);
+    }
+
+    .searchable-multiselect .form-control::placeholder {
+        color: var(--text-subdued, #6A6A6A);
+    }
+
+    .searchable-multiselect .input-group-text {
+        background-color: var(--spotify-highlight, #282828);
+        border-color: var(--border-subtle, #404040);
+        color: var(--text-secondary, #B3B3B3);
+    }
+
+    .searchable-multiselect .btn-link {
+        color: var(--spotify-green, #1DB954);
+    }
+
+    .searchable-multiselect .btn-link:hover {
+        color: var(--spotify-green-hover, #1ed760);
+    }
+
+    .searchable-multiselect .btn-outline-secondary {
+        color: var(--text-secondary, #B3B3B3);
+        border-color: var(--border-subtle, #404040);
+    }
+
+    .searchable-multiselect .btn-outline-secondary:hover {
+        color: var(--text-primary, #FFFFFF);
+        background-color: var(--spotify-highlight, #282828);
+        border-color: var(--border-strong, #404040);
+    }
+</style>
