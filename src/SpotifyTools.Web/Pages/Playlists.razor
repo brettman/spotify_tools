@@ -358,16 +358,16 @@
                                 </div>
                                 <div class="d-flex flex-wrap gap-1">
                                     @{
-                                        var genreCounts = playlistDetail.Tracks
+                                        var allGenreCounts = playlistDetail.Tracks
                                             .SelectMany(t => t.Genres)
                                             .Where(g => !string.IsNullOrWhiteSpace(g))
                                             .GroupBy(g => g)
                                             .Select(g => new { Genre = g.Key, Count = g.Count() })
                                             .OrderByDescending(x => x.Count)
-                                            .Take(10)
                                             .ToList();
                                         
-                                        var totalGenreOccurrences = genreCounts.Sum(g => g.Count);
+                                        var genreCounts = showAllGenres ? allGenreCounts : allGenreCounts.Take(10).ToList();
+                                        var totalGenreOccurrences = allGenreCounts.Sum(g => g.Count);
                                     }
                                     @foreach (var genreCount in genreCounts)
                                     {
@@ -385,9 +385,21 @@
                                             }
                                         </span>
                                     }
-                                    @if (playlistDetail.TotalGenreCount > 10)
+                                    @if (!showAllGenres && playlistDetail.TotalGenreCount > 10)
                                     {
-                                        <span class="badge bg-light text-muted">+@(playlistDetail.TotalGenreCount - 10) more</span>
+                                        <button class="badge bg-info text-white" style="cursor: pointer; border: none; padding: 0.35rem 0.65rem;" 
+                                                @onclick="() => showAllGenres = true">
+                                            <i class="bi bi-chevron-down me-1"></i>
+                                            Show @(playlistDetail.TotalGenreCount - 10) more genres
+                                        </button>
+                                    }
+                                    @if (showAllGenres && playlistDetail.TotalGenreCount > 10)
+                                    {
+                                        <button class="badge bg-info text-white" style="cursor: pointer; border: none; padding: 0.35rem 0.65rem;" 
+                                                @onclick="() => showAllGenres = false">
+                                            <i class="bi bi-chevron-up me-1"></i>
+                                            Show less
+                                        </button>
                                     }
                                 </div>
                                 @if (modalSelectedGenres.Any())
@@ -487,6 +499,7 @@
     private bool loadingDetail = false;
     private HashSet<string> modalSelectedGenres = new();
     private List<TrackDto> filteredTracks = new();
+    private bool showAllGenres = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -582,6 +595,7 @@
         loadingDetail = true;
         playlistDetail = null;
         modalSelectedGenres.Clear();
+        showAllGenres = false; // Reset to collapsed state
 
         try
         {
@@ -609,6 +623,7 @@
         playlistDetail = null;
         modalSelectedGenres.Clear();
         filteredTracks.Clear();
+        showAllGenres = false;
     }
 
     private void ToggleModalGenreFilter(string genre)
