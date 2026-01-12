@@ -3,6 +3,7 @@
 @using SpotifyTools.Data.Repositories.Interfaces
 @using SpotifyTools.Domain.Enums
 @using SpotifyTools.Sync
+@implements IDisposable
 
 @inject IServiceProvider ServiceProvider
 @inject ILogger<SyncMonitor> Logger
@@ -215,27 +216,43 @@
     private bool isStarting = false;
     private string? errorMessage = null;
     private string? successMessage = null;
+    
+    private CancellationTokenSource? _cancellationTokenSource;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadData();
         
         // Auto-refresh every 5 seconds if sync is active
+        _cancellationTokenSource = new CancellationTokenSource();
         _ = Task.Run(async () =>
         {
-            while (true)
+            try
             {
-                await Task.Delay(5000);
-                if (currentStatus.IsActive)
+                while (!_cancellationTokenSource.Token.IsCancellationRequested)
                 {
-                    await InvokeAsync(async () =>
+                    await Task.Delay(5000, _cancellationTokenSource.Token);
+                    if (currentStatus.IsActive)
                     {
-                        await LoadStatusSilently();
-                        StateHasChanged();
-                    });
+                        await InvokeAsync(async () =>
+                        {
+                            await LoadStatusSilently();
+                            StateHasChanged();
+                        });
+                    }
                 }
             }
-        });
+            catch (OperationCanceledException)
+            {
+                // Expected when component is disposed
+            }
+        }, _cancellationTokenSource.Token);
+    }
+    
+    public void Dispose()
+    {
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
     }
 
     private async Task LoadData()

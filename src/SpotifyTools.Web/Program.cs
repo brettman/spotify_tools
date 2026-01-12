@@ -52,6 +52,7 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 // Business logic services (Phase 1 refactoring)
 builder.Services.AddScoped<IGenreService, GenreService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<IArtistService, ArtistService>();
 builder.Services.AddScoped<IPlayHistoryService, PlayHistoryService>();
 builder.Services.AddScoped<IListeningAnalyticsService, ListeningAnalyticsService>();
 

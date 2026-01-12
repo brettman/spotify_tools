@@ -512,3 +512,69 @@
     font-size: 24px;
     margin-bottom: var(--space-sm);
 }
+
+/* ==================== Artist Components ==================== */
+.artist-image {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.artist-image-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.artist-image-placeholder {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: var(--spotify-highlight);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 24px;
+}
+
+.genre-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.clickable-badge {
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.clickable-badge:hover {
+    transform: scale(1.05);
+    opacity: 0.9;
+}
+
+.stat-card {
+    background-color: var(--spotify-elevated);
+    border-radius: var(--radius-medium);
+    padding: var(--space-md);
+    box-shadow: var(--shadow-base);
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: var(--space-sm);
+}
+
+.stat-value {
+    color: var(--text-primary);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+}

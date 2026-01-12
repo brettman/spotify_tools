@@ -32,6 +32,24 @@
             </div>
         </div>
 
+        <!-- Artists Card -->
+        <div class="col-md-3">
+            <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/artists")' style="cursor: pointer;">
+                <div class="text-center p-4">
+                    <div class="mb-3">
+                        <i class="bi bi-person-fill text-spotify-green" style="font-size: 3.5rem;"></i>
+                    </div>
+                    <h3 class="mb-2">Artists</h3>
+                    <p class="text-spotify-secondary mb-3 small">
+                        Explore your favorite artists and their tracks
+                    </p>
+                    <button class="spotify-btn spotify-btn-primary btn-sm">
+                        View Artists →
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Playlists Card -->
         <div class="col-md-3">
             <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/playlists")' style="cursor: pointer;">
@@ -67,7 +85,10 @@
                 </div>
             </div>
         </div>
+    </div>
 
+    <!-- Second Row -->
+    <div class="row g-4 mb-5">
         <!-- Sync Status Card -->
         <div class="col-md-3">
             <div class="spotify-card h-100" @onclick='() => Navigation.NavigateTo("/sync")' style="cursor: pointer;">

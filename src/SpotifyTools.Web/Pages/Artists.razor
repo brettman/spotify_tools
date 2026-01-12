@@ -1,0 +1,558 @@
+@page "/artists"
+@using SpotifyTools.Web.Services
+@using SpotifyTools.Web.DTOs
+
+@inject IArtistService ArtistService
+@inject ILogger<Artists> Logger
+@inject NavigationManager Navigation
+
+<PageTitle>Artists</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/start")'>
+                ← Back
+            </button>
+        </div>
+        <div class="col">
+            <h1>🎤 Artists</h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="RefreshArtists" disabled="@isLoading">
+                <span class="@(isLoading ? "spinner-border spinner-border-sm me-1" : "")"></span>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text"
+                       class="form-control"
+                       placeholder="Search artists by name..."
+                       @bind="searchQuery"
+                       @bind:event="oninput"
+                       @bind:after="SearchArtists" />
+                @if (!string.IsNullOrEmpty(searchQuery))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" @bind="sortBy" @bind:after="SortArtists">
+                <option value="name">Sort by Name</option>
+                <option value="popularity">Sort by Popularity</option>
+                <option value="tracks">Sort by Saved Tracks</option>
+                <option value="followers">Sort by Followers</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" @bind="sortDirection" @bind:after="SortArtists">
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Genre Filter -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <SearchableMultiSelect TItem="string"
+                                 Label="Filter by Genres"
+                                 Placeholder="Search genres..."
+                                 Items="@allGenres"
+                                 SelectedItems="@selectedGenres"
+                                 SelectedItemsChanged="@OnGenreSelectionChanged"
+                                 GetDisplayText="@(genre => genre)" />
+        </div>
+    </div>
+
+    @if (isLoading && artists.Count == 0)
+    {
+        <div class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading artists...</p>
+        </div>
+    }
+    else if (artists.Count == 0)
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            No artists found. Try adjusting your search or filters.
+        </div>
+    }
+    else
+    {
+        <!-- Summary Stats -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Total Artists</div>
+                    <div class="stat-value">@artists.Count</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Total Genres</div>
+                    <div class="stat-value">@allGenres.Count</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Avg Popularity</div>
+                    <div class="stat-value">@(artists.Any() ? Math.Round(artists.Average(a => a.Popularity), 0) : 0)</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">Total Saved Tracks</div>
+                    <div class="stat-value">@artists.Sum(a => a.SavedTrackCount)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Artists Table -->
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;"></th>
+                        <th>Artist</th>
+                        <th>Genres</th>
+                        <th class="text-center" style="width: 120px;">Popularity</th>
+                        <th class="text-center" style="width: 120px;">Followers</th>
+                        <th class="text-center" style="width: 120px;">Saved Tracks</th>
+                        <th class="text-center" style="width: 120px;">Playlists</th>
+                        <th style="width: 100px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var artist in artists)
+                    {
+                        <tr>
+                            <td class="align-middle">
+                                @if (!string.IsNullOrEmpty(artist.ImageUrl))
+                                {
+                                    <img src="@artist.ImageUrl" alt="@artist.Name" class="artist-image" />
+                                }
+                                else
+                                {
+                                    <div class="artist-image-placeholder">
+                                        <i class="bi bi-person-fill"></i>
+                                    </div>
+                                }
+                            </td>
+                            <td class="align-middle">
+                                <div class="fw-bold">@artist.Name</div>
+                            </td>
+                            <td class="align-middle">
+                                @if (artist.Genres.Any())
+                                {
+                                    <div class="genre-tags">
+                                        @foreach (var genre in artist.Genres.Take(3))
+                                        {
+                                            <span class="badge bg-secondary me-1">@genre</span>
+                                        }
+                                        @if (artist.Genres.Count > 3)
+                                        {
+                                            <span class="badge bg-secondary">+@(artist.Genres.Count - 3) more</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">No genres</span>
+                                }
+                            </td>
+                            <td class="align-middle text-center">
+                                <span class="badge @GetPopularityBadgeClass(artist.Popularity)">
+                                    @artist.Popularity
+                                </span>
+                            </td>
+                            <td class="align-middle text-center">
+                                @FormatFollowers(artist.Followers)
+                            </td>
+                            <td class="align-middle text-center">
+                                <span class="badge bg-primary">@artist.SavedTrackCount</span>
+                            </td>
+                            <td class="align-middle text-center">
+                                <span class="badge bg-info">@artist.PlaylistCount</span>
+                            </td>
+                            <td class="align-middle text-center">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => ShowArtistDetails(artist.Id)">
+                                    Details
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- Artist Detail Modal -->
+@if (showModal && selectedArtist != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="d-flex align-items-center">
+                        @if (!string.IsNullOrEmpty(selectedArtist.ImageUrl))
+                        {
+                            <img src="@selectedArtist.ImageUrl" alt="@selectedArtist.Name" class="artist-image-large me-3" />
+                        }
+                        <div>
+                            <h5 class="modal-title mb-0">@selectedArtist.Name</h5>
+                            <div class="text-muted small">
+                                <span class="me-3">Popularity: @selectedArtist.Popularity</span>
+                                @if (selectedArtist.Followers > 0)
+                                {
+                                    <span>Followers: @FormatFollowers(selectedArtist.Followers)</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Genre Breakdown -->
+                    @if (selectedArtist.Genres.Any())
+                    {
+                        <div class="mb-4">
+                            <h6 class="mb-2">Genres</h6>
+                            <div>
+                                @foreach (var genre in selectedArtist.Genres)
+                                {
+                                    var isSelected = modalSelectedGenres.Contains(genre);
+                                    <span class="badge @(isSelected ? "bg-primary" : "bg-secondary") me-1 mb-1 clickable-badge"
+                                          style="cursor: pointer; font-size: 0.875rem;"
+                                          @onclick="() => ToggleGenreFilter(genre)">
+                                        @genre
+                                    </span>
+                                }
+                            </div>
+                            @if (modalSelectedGenres.Any())
+                            {
+                                <div class="alert alert-info mt-2 mb-0">
+                                    <i class="bi bi-filter me-2"></i>
+                                    Showing @filteredTracks.Count of @selectedArtist.SavedTracks.Count tracks
+                                    <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ClearGenreFilter">Clear Filter</button>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- Saved Tracks -->
+                    <div class="mb-4">
+                        <h6 class="mb-2">
+                            Saved Tracks (@(modalSelectedGenres.Any() ? filteredTracks.Count : selectedArtist.SavedTracks.Count))
+                        </h6>
+                        @if (selectedArtist.SavedTracks.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Track</th>
+                                            <th>Album</th>
+                                            <th>Artists</th>
+                                            <th class="text-center">Duration</th>
+                                            <th class="text-center">Popularity</th>
+                                            <th>Added</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var track in modalSelectedGenres.Any() ? filteredTracks : selectedArtist.SavedTracks)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    @track.Name
+                                                    @if (track.Explicit)
+                                                    {
+                                                        <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">E</span>
+                                                    }
+                                                </td>
+                                                <td class="text-muted">@track.AlbumName</td>
+                                                <td class="text-muted small">
+                                                    @string.Join(", ", track.Artists.Select(a => a.Name))
+                                                </td>
+                                                <td class="text-center">@FormatDuration(track.DurationMs)</td>
+                                                <td class="text-center">
+                                                    <span class="badge @GetPopularityBadgeClass(track.Popularity)">
+                                                        @track.Popularity
+                                                    </span>
+                                                </td>
+                                                <td class="text-muted small">
+                                                    @track.AddedAt?.ToString("MMM dd, yyyy")
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No saved tracks</p>
+                        }
+                    </div>
+
+                    <!-- Playlists -->
+                    <div class="mb-3">
+                        <h6 class="mb-2">Appears in Playlists (@selectedArtist.Playlists.Count)</h6>
+                        @if (selectedArtist.Playlists.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Playlist</th>
+                                            <th class="text-center">Track Count</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var playlist in selectedArtist.Playlists)
+                                        {
+                                            <tr>
+                                                <td>@playlist.PlaylistName</td>
+                                                <td class="text-center">
+                                                    <span class="badge bg-primary">@playlist.TrackCount</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">Not in any playlists</p>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ArtistDto> allArtists = new();
+    private List<ArtistDto> artists = new();
+    private List<string> allGenres = new();
+    private HashSet<string> selectedGenres = new();
+    private string searchQuery = string.Empty;
+    private string sortBy = "name";
+    private string sortDirection = "asc";
+    private bool isLoading = false;
+
+    // Modal state
+    private bool showModal = false;
+    private ArtistDetailDto? selectedArtist = null;
+    private List<string> modalSelectedGenres = new();
+    private List<TrackDto> filteredTracks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadArtists();
+    }
+
+    private async Task LoadArtists()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            allArtists = await ArtistService.GetAllArtistsAsync();
+            
+            // Extract all unique genres
+            allGenres = allArtists
+                .SelectMany(a => a.Genres)
+                .Distinct()
+                .OrderBy(g => g)
+                .ToList();
+
+            FilterAndSortArtists();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading artists");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshArtists()
+    {
+        await LoadArtists();
+    }
+
+    private void SearchArtists()
+    {
+        FilterAndSortArtists();
+    }
+
+    private void ClearSearch()
+    {
+        searchQuery = string.Empty;
+        FilterAndSortArtists();
+    }
+
+    private async Task OnGenreSelectionChanged(HashSet<string> genres)
+    {
+        selectedGenres = genres;
+        FilterAndSortArtists();
+        await Task.CompletedTask;
+    }
+
+    private void FilterAndSortArtists()
+    {
+        artists = allArtists;
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            artists = artists
+                .Where(a => a.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        // Apply genre filter (AND logic - artist must have ALL selected genres)
+        if (selectedGenres.Any())
+        {
+            artists = artists
+                .Where(a => selectedGenres.All(sg => a.Genres.Any(ag => ag.Equals(sg, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
+        }
+
+        SortArtists();
+    }
+
+    private void SortArtists()
+    {
+        artists = sortBy switch
+        {
+            "popularity" => sortDirection == "asc" 
+                ? artists.OrderBy(a => a.Popularity).ToList()
+                : artists.OrderByDescending(a => a.Popularity).ToList(),
+            "tracks" => sortDirection == "asc"
+                ? artists.OrderBy(a => a.SavedTrackCount).ToList()
+                : artists.OrderByDescending(a => a.SavedTrackCount).ToList(),
+            "followers" => sortDirection == "asc"
+                ? artists.OrderBy(a => a.Followers).ToList()
+                : artists.OrderByDescending(a => a.Followers).ToList(),
+            _ => sortDirection == "asc"
+                ? artists.OrderBy(a => a.Name).ToList()
+                : artists.OrderByDescending(a => a.Name).ToList()
+        };
+        StateHasChanged();
+    }
+
+    private async Task ShowArtistDetails(string artistId)
+    {
+        try
+        {
+            selectedArtist = await ArtistService.GetArtistByIdAsync(artistId);
+            modalSelectedGenres.Clear();
+            filteredTracks.Clear();
+            showModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading artist details for {ArtistId}", artistId);
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        selectedArtist = null;
+        modalSelectedGenres.Clear();
+        filteredTracks.Clear();
+        StateHasChanged();
+    }
+
+    private void ToggleGenreFilter(string genre)
+    {
+        if (modalSelectedGenres.Contains(genre))
+        {
+            modalSelectedGenres.Remove(genre);
+        }
+        else
+        {
+            modalSelectedGenres.Add(genre);
+        }
+
+        UpdateFilteredTracks();
+        StateHasChanged();
+    }
+
+    private void ClearGenreFilter()
+    {
+        modalSelectedGenres.Clear();
+        filteredTracks.Clear();
+        StateHasChanged();
+    }
+
+    private void UpdateFilteredTracks()
+    {
+        if (selectedArtist == null || !modalSelectedGenres.Any())
+        {
+            filteredTracks.Clear();
+            return;
+        }
+
+        // Show tracks with ANY of the selected genres (OR logic)
+        filteredTracks = selectedArtist.SavedTracks
+            .Where(t => t.Genres.Any(g => modalSelectedGenres.Contains(g, StringComparer.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private string GetPopularityBadgeClass(int popularity)
+    {
+        return popularity switch
+        {
+            >= 80 => "bg-success",
+            >= 60 => "bg-primary",
+            >= 40 => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string FormatFollowers(int followers)
+    {
+        if (followers >= 1_000_000)
+            return $"{followers / 1_000_000.0:F1}M";
+        if (followers >= 1_000)
+            return $"{followers / 1_000.0:F1}K";
+        return followers.ToString();
+    }
+
+    private string FormatDuration(int durationMs)
+    {
+        var duration = TimeSpan.FromMilliseconds(durationMs);
+        return duration.TotalHours >= 1 
+            ? $"{(int)duration.TotalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
+            : $"{duration.Minutes}:{duration.Seconds:D2}";
+    }
+}
